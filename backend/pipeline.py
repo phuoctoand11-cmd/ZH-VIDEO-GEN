@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from audio.templates import AudioTemplate
-from audio.tts import get_audio_duration, synthesize
+from audio.tts import synthesize
 from content.pinyin import fill_pinyin_batch
 from content.schema import LessonItem
 from render.assemble import assemble_video, build_scene_clip
@@ -35,13 +35,11 @@ def run_pipeline(
     for index, item in enumerate(items):
         try:
             audio_paths = []
-            durations = []
             for seg_index, segment in enumerate(template.segments):
                 text = item.hanzi if segment.lang == "zh" else item.meaning_vi
                 audio_path = f"{work_dir}/audio_{index}_{seg_index}.mp3"
                 synthesize(text, segment.lang, audio_path)
                 audio_paths.append(audio_path)
-                durations.append(get_audio_duration(audio_path))
 
             prompt = build_image_prompt(item)
             image_path = generate_image(prompt, cache_dir=f"{work_dir}/images")

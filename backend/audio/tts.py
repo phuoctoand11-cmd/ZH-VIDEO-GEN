@@ -1,9 +1,9 @@
 import asyncio
-import subprocess
 import time
 from pathlib import Path
 
 import edge_tts
+from mutagen.mp3 import MP3
 
 VOICE_MAP = {
     "zh": "zh-CN-XiaoxiaoNeural",
@@ -38,11 +38,9 @@ def synthesize(text: str, lang: str, out_path: str, max_retries: int = 2) -> str
 
 
 def get_audio_duration(path: str) -> float:
-    result = subprocess.run(
-        [
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1", str(path),
-        ],
-        capture_output=True, text=True, check=True,
-    )
-    return float(result.stdout.strip())
+    """Return the duration of an mp3 file in seconds.
+
+    Uses mutagen (a pure-Python mp3 header reader) so that no system
+    `ffprobe` binary is required at runtime.
+    """
+    return float(MP3(str(path)).info.length)

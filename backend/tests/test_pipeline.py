@@ -16,10 +16,6 @@ def _fake_synthesize(text, lang, out_path):
     return out_path
 
 
-def _fake_duration(path):
-    return 1.0
-
-
 def _fake_generate_image(prompt, cache_dir):
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
     return f"{cache_dir}/img.png"
@@ -43,7 +39,6 @@ def _template():
 
 def test_run_pipeline_happy_path(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline_module, "synthesize", _fake_synthesize)
-    monkeypatch.setattr(pipeline_module, "get_audio_duration", _fake_duration)
     monkeypatch.setattr(pipeline_module, "generate_image", _fake_generate_image)
     monkeypatch.setattr(pipeline_module, "build_scene_clip", _fake_build_scene_clip)
     monkeypatch.setattr(pipeline_module, "assemble_video", _fake_assemble_video)
@@ -67,7 +62,6 @@ def test_run_pipeline_isolates_item_failure(tmp_path, monkeypatch):
         return out_path
 
     monkeypatch.setattr(pipeline_module, "synthesize", flaky_synthesize)
-    monkeypatch.setattr(pipeline_module, "get_audio_duration", _fake_duration)
     monkeypatch.setattr(pipeline_module, "generate_image", _fake_generate_image)
     monkeypatch.setattr(pipeline_module, "build_scene_clip", _fake_build_scene_clip)
     monkeypatch.setattr(pipeline_module, "assemble_video", _fake_assemble_video)
@@ -85,7 +79,6 @@ def test_run_pipeline_isolates_assembly_failure(tmp_path, monkeypatch):
         raise RuntimeError("ffmpeg exploded")
 
     monkeypatch.setattr(pipeline_module, "synthesize", _fake_synthesize)
-    monkeypatch.setattr(pipeline_module, "get_audio_duration", _fake_duration)
     monkeypatch.setattr(pipeline_module, "generate_image", _fake_generate_image)
     monkeypatch.setattr(pipeline_module, "build_scene_clip", _fake_build_scene_clip)
     monkeypatch.setattr(pipeline_module, "assemble_video", failing_assemble)
