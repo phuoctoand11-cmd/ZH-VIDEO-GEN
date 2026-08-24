@@ -21,6 +21,9 @@ def build_scene_clip(
     size = ASPECT_SIZES[aspect_ratio]
     audio_clips = [AudioFileClip(p) for p in audio_paths]
     durations = [clip.duration for clip in audio_clips]
+    # concatenate_audioclips() keeps references to these clips and reads from
+    # them lazily (at write_videofile time), so they must stay open until the
+    # scene is actually written — do not close them here.
     scene_audio = concatenate_audioclips(audio_clips)
     cues = build_overlay_cues(item, template, durations)
     background = make_kenburns_clip(image_path, duration=total_duration(durations), size=size)
@@ -36,5 +39,13 @@ def build_scene_clip(
 
 def assemble_video(scene_clips: list[VideoClip], out_path: str) -> str:
     final = concatenate_videoclips(scene_clips, method="compose")
-    final.write_videofile(out_path, fps=24, codec="libx264", audio_codec="aac", logger=None)
+    try:
+        final.write_videofile(out_path, fps=24, codec="libx264", audio_codec="aac", logger=None)
+    finally:
+        # write_videofile spawns an ffmpeg subprocess per clip in the chain;
+        # closing releases those processes and their buffers instead of
+        # holding them until the whole request (all items, all ratios) ends.
+        final.close()
+        for clip in scene_clips:
+            clip.close()
     return out_path
