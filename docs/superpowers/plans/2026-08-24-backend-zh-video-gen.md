@@ -585,7 +585,7 @@ git commit -m "feat: compute overlay text cues synced to audio segment timing"
 ## Task 7: Font asset and text drawing
 
 **Files:**
-- Create: `backend/assets/fonts/NotoSansSC-Regular.otf` (downloaded binary)
+- Create: `backend/assets/fonts/NotoSansCJKsc-Regular.otf` (downloaded binary)
 - Modify: `backend/render/overlay.py`
 - Modify: `backend/tests/render/test_overlay.py`
 
@@ -593,16 +593,16 @@ git commit -m "feat: compute overlay text cues synced to audio segment timing"
 - Consumes: `OverlayCue.text` from Task 6.
 - Produces: `draw_text_on_frame(frame: np.ndarray, text: str, font_size: int = 60) -> np.ndarray`, used by Task 11's scene assembly.
 
-**Note:** the default PIL font has no CJK glyphs, so chữ Hán would render as blank boxes — a real font that covers both Chinese and Vietnamese (with diacritics) is required. Noto Sans SC covers both.
+**Note:** the default PIL font has no CJK glyphs, so chữ Hán would render as blank boxes — a real font that covers both Chinese and Vietnamese (with diacritics) is required. Noto Sans CJK SC's Latin range covers Vietnamese precomposed characters (built on Source Han Sans, which explicitly supports Vietnamese), so one font file covers both scripts.
 
 - [ ] **Step 1: Download the font**
 
 ```bash
 mkdir -p backend/assets/fonts
-curl -L -o backend/assets/fonts/NotoSansSC-Regular.otf "https://raw.githubusercontent.com/googlefonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansSC-Regular.otf"
+curl -L -o backend/assets/fonts/NotoSansCJKsc-Regular.otf "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
 ```
 
-Expected: file `backend/assets/fonts/NotoSansSC-Regular.otf` exists and is several MB in size (`ls -la backend/assets/fonts/`).
+Expected: file `backend/assets/fonts/NotoSansCJKsc-Regular.otf` exists and is about 16MB (`ls -la backend/assets/fonts/`).
 
 - [ ] **Step 2: Write the failing test**
 
@@ -633,7 +633,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-FONT_PATH = Path(__file__).resolve().parent.parent / "assets" / "fonts" / "NotoSansSC-Regular.otf"
+FONT_PATH = Path(__file__).resolve().parent.parent / "assets" / "fonts" / "NotoSansCJKsc-Regular.otf"
 
 
 def draw_text_on_frame(frame: np.ndarray, text: str, font_size: int = 60) -> np.ndarray:
@@ -663,8 +663,8 @@ Expected: PASS (5 passed)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/assets/fonts/NotoSansSC-Regular.otf backend/render/overlay.py backend/tests/render/test_overlay.py
-git commit -m "feat: draw Chinese/Vietnamese text overlay using Noto Sans SC"
+git add backend/assets/fonts/NotoSansCJKsc-Regular.otf backend/render/overlay.py backend/tests/render/test_overlay.py
+git commit -m "feat: draw Chinese/Vietnamese text overlay using Noto Sans CJK SC"
 ```
 
 ---
