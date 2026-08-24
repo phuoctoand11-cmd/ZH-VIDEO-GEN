@@ -1,0 +1,8 @@
+{
+  "name": "zh-zh-vi",
+  "segments": [
+    {"lang": "zh", "field": "hanzi"},
+    {"lang": "zh", "field": "hanzi"},
+    {"lang": "vi", "field": "meaning_vi"}
+  ]
+}
