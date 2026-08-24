@@ -1,0 +1,14 @@
+gradio>=4.44
+pydantic>=2.7
+pypinyin>=0.51
+edge-tts>=6.1
+mutagen>=1.47
+moviepy>=1.0.3
+Pillow>=10.3
+diffusers>=0.30
+transformers>=4.42
+torch>=2.3
+accelerate>=0.31
+google-generativeai>=0.7
+spaces>=0.28
+pytest>=8.2
