@@ -1,9 +1,14 @@
-gradio>=4.44
+# On Hugging Face Spaces the gradio version actually installed comes from
+# `sdk_version` in README.md front matter (currently 6.25.0, the version this
+# backend is developed and tested against). The floor below only guards local
+# installs from resolving an incompatible older major.
+gradio>=6.0
 pydantic>=2.7
 pypinyin>=0.51
 edge-tts>=6.1
 mutagen>=1.47
-moviepy>=1.0.3
+moviepy>=2.0
+numpy>=1.26
 Pillow>=10.3
 diffusers>=0.30
 transformers>=4.42
