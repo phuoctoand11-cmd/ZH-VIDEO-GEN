@@ -940,7 +940,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'render.kenburns'`
 ```python
 # backend/render/kenburns.py
 import numpy as np
-from moviepy.editor import VideoClip
+from moviepy import VideoClip
 from PIL import Image
 
 
@@ -1049,7 +1049,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'render.assemble'`
 
 ```python
 # backend/render/assemble.py
-from moviepy.editor import AudioFileClip, VideoClip, concatenate_audioclips, concatenate_videoclips
+from moviepy import AudioFileClip, VideoClip, concatenate_audioclips, concatenate_videoclips
 
 from audio.templates import AudioTemplate
 from content.schema import LessonItem
@@ -1082,7 +1082,7 @@ def build_scene_clip(
         return draw_text_on_frame(frame, active_cue.text)
 
     scene = VideoClip(make_frame, duration=total_duration(durations))
-    return scene.set_audio(scene_audio)
+    return scene.with_audio(scene_audio)
 
 
 def assemble_video(scene_clips: list[VideoClip], out_path: str) -> str:
