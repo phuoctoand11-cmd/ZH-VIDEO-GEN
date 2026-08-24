@@ -39,11 +39,63 @@ def test_total_duration():
 
 
 import numpy as np
-from render.overlay import draw_text_on_frame
+from PIL import Image, ImageDraw, ImageFont
+
+from render.overlay import FONT_PATH, TEXT_MARGIN, _wrap_line, draw_text_on_frame
 
 
 def test_draw_text_on_frame_changes_pixels():
     frame = np.zeros((200, 400, 3), dtype=np.uint8)
     result = draw_text_on_frame(frame, "吃\nchī")
     assert result.shape == frame.shape
+    assert not np.array_equal(result, frame)
+
+
+def _draw_and_font(font_size=60):
+    image = Image.new("RGB", (720, 1280))
+    return ImageDraw.Draw(image), ImageFont.truetype(str(FONT_PATH), font_size)
+
+
+def _width(draw, text, font):
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0]
+
+
+def test_wrap_line_splits_long_sentence_to_fit():
+    draw, font = _draw_and_font()
+    max_width = 720 - 2 * TEXT_MARGIN
+    sentence = "Tôi muốn uống một cốc cà phê sữa đá vào buổi sáng"
+    assert _width(draw, sentence, font) > max_width  # would overflow unwrapped
+
+    lines = _wrap_line(draw, sentence, font, max_width)
+    assert len(lines) > 1
+    assert all(_width(draw, line, font) <= max_width for line in lines)
+    assert " ".join(lines) == sentence
+
+
+def test_wrap_line_splits_long_pinyin():
+    draw, font = _draw_and_font()
+    max_width = 720 - 2 * TEXT_MARGIN
+    pinyin = "wǒ xiǎng hē yī bēi bīng kā fēi sữa đá měi tiān zǎo shang"
+    lines = _wrap_line(draw, pinyin, font, max_width)
+    assert len(lines) > 1
+    assert all(_width(draw, line, font) <= max_width for line in lines)
+
+
+def test_wrap_line_keeps_short_line_intact():
+    draw, font = _draw_and_font()
+    assert _wrap_line(draw, "chī", font, 720 - 2 * TEXT_MARGIN) == ["chī"]
+
+
+def test_draw_text_on_frame_wrapped_text_stays_inside_frame():
+    width = 720
+    frame = np.zeros((1280, width, 3), dtype=np.uint8)
+    sentence = "Tôi muốn uống một cốc cà phê sữa đá vào buổi sáng"
+    result = draw_text_on_frame(frame, sentence)
+    assert result.shape == frame.shape
+
+    # Unwrapped, the centred single line would start at a negative x and be
+    # clipped at both edges. With wrapping, both edge columns stay untouched.
+    assert np.array_equal(result[:, 0, :], frame[:, 0, :])
+    assert np.array_equal(result[:, width - 1, :], frame[:, width - 1, :])
     assert not np.array_equal(result, frame)
