@@ -1,52 +1,28 @@
 import hashlib
+import os
 from pathlib import Path
 
+from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw
 
-try:
-    import spaces
-except ImportError:
-    class _NoOpSpaces:
-        @staticmethod
-        def GPU(func=None, *, duration=None, **kwargs):
-            """No-op stand-in for `spaces.GPU` outside Hugging Face Spaces.
+MODEL_ID = "black-forest-labs/FLUX.1-schnell"
 
-            Supports both `@spaces.GPU` and `@spaces.GPU(duration=...)`.
-            """
-            if func is None:
-                def decorator(inner):
-                    return inner
-
-                return decorator
-            return func
-
-    spaces = _NoOpSpaces()
-
-_pipeline = None
+_client = None
 
 
-def _get_pipeline():
-    global _pipeline
-    if _pipeline is None:
-        import torch
-        from diffusers import FluxPipeline
-
-        _pipeline = FluxPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-schnell", torch_dtype=torch.bfloat16
-        )
-        _pipeline.to("cuda")
-    return _pipeline
+def _get_client() -> InferenceClient:
+    global _client
+    if _client is None:
+        token = os.environ.get("HF_TOKEN")
+        if not token:
+            raise RuntimeError("HF_TOKEN environment variable is not set")
+        _client = InferenceClient(model=MODEL_ID, token=token)
+    return _client
 
 
-# A generous GPU budget: on the first call `_get_pipeline()` still has to
-# download and load FLUX.1-schnell inside this same window, which does not fit
-# in ZeroGPU's 60s default and would silently degrade every image to the
-# placeholder fallback.
-@spaces.GPU(duration=180)
 def _generate(prompt: str, width: int = 768, height: int = 768, steps: int = 4) -> Image.Image:
-    pipeline = _get_pipeline()
-    result = pipeline(prompt, width=width, height=height, num_inference_steps=steps)
-    return result.images[0]
+    client = _get_client()
+    return client.text_to_image(prompt, width=width, height=height, num_inference_steps=steps)
 
 
 def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Image.Image:
