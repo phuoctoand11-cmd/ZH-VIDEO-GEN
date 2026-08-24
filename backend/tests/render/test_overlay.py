@@ -36,3 +36,14 @@ def test_build_overlay_cues_mismatched_length_raises():
 
 def test_total_duration():
     assert total_duration([1.0, 2.0, 1.5]) == 4.5
+
+
+import numpy as np
+from render.overlay import draw_text_on_frame
+
+
+def test_draw_text_on_frame_changes_pixels():
+    frame = np.zeros((200, 400, 3), dtype=np.uint8)
+    result = draw_text_on_frame(frame, "吃\nchī")
+    assert result.shape == frame.shape
+    assert not np.array_equal(result, frame)
