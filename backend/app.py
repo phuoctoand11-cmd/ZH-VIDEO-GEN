@@ -98,6 +98,7 @@ def build_app() -> gr.Blocks:
             generate_video,
             inputs=[mode, csv_text, topic, template_name, aspect_ratios],
             outputs=[video_9_16, video_16_9, log],
+            api_name="generate_video",
         )
 
     return demo
