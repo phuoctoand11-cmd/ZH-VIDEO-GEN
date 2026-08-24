@@ -10,6 +10,19 @@ from audio.templates import AudioTemplate
 
 FONT_PATH = Path(__file__).resolve().parent.parent / "assets" / "fonts" / "NotoSansCJKsc-Regular.otf"
 
+# Parsing the ~16MB CJK font file from disk on every single rendered frame
+# (previously: inside draw_text_on_frame) is real, avoidable CPU/memory churn
+# at 24fps — load each requested size once and reuse it for the whole process.
+_FONT_CACHE: dict[int, ImageFont.FreeTypeFont] = {}
+
+
+def _get_font(font_size: int) -> ImageFont.FreeTypeFont:
+    font = _FONT_CACHE.get(font_size)
+    if font is None:
+        font = ImageFont.truetype(str(FONT_PATH), font_size)
+        _FONT_CACHE[font_size] = font
+    return font
+
 
 @dataclass
 class OverlayCue:
@@ -77,7 +90,7 @@ def _wrap_line(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> li
 def draw_text_on_frame(frame: np.ndarray, text: str, font_size: int = 60) -> np.ndarray:
     image = Image.fromarray(frame).convert("RGB")
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype(str(FONT_PATH), font_size)
+    font = _get_font(font_size)
     width, _height = image.size
     max_text_width = max(width - 2 * TEXT_MARGIN, 1)
     lines: list[str] = []
