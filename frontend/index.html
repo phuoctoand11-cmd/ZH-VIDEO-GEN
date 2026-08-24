@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tạo video dạy tiếng Trung</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <h1>Tạo video dạy tiếng Trung song ngữ Việt-Trung</h1>
+
+  <form id="generate-form">
+    <fieldset>
+      <legend>Chế độ nhập</legend>
+      <label><input type="radio" name="mode" value="Nhập danh sách" checked> Nhập danh sách</label>
+      <label><input type="radio" name="mode" value="Chủ đề tự động"> Chủ đề tự động</label>
+    </fieldset>
+
+    <label for="csv-text">Danh sách CSV (hanzi,pinyin,meaning_vi)</label>
+    <textarea id="csv-text" rows="8" placeholder="hanzi,pinyin,meaning_vi&#10;吃,chī,ăn"></textarea>
+
+    <label for="topic">Chủ đề (chế độ tự động)</label>
+    <input type="text" id="topic" placeholder="ví dụ: đồ ăn">
+
+    <label for="template-name">Template trình tự audio</label>
+    <select id="template-name">
+      <option value="zh-zh-vi">zh-zh-vi</option>
+      <option value="zh-vi-zh">zh-vi-zh</option>
+    </select>
+
+    <fieldset>
+      <legend>Tỉ lệ khung hình</legend>
+      <label><input type="checkbox" name="aspect_ratio" value="9:16" checked> 9:16</label>
+      <label><input type="checkbox" name="aspect_ratio" value="16:9"> 16:9</label>
+    </fieldset>
+
+    <button type="submit" id="submit-btn">Tạo video</button>
+  </form>
+
+  <p id="status"></p>
+
+  <div id="results">
+    <div id="result-9-16" style="display:none">
+      <video id="video-9-16" controls></video>
+      <a id="download-9-16" download>Tải video 9:16</a>
+    </div>
+    <div id="result-16-9" style="display:none">
+      <video id="video-16-9" controls></video>
+      <a id="download-16-9" download>Tải video 16:9</a>
+    </div>
+    <pre id="log"></pre>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
