@@ -27,3 +27,36 @@ def test_generate_image_falls_back_to_placeholder(tmp_path, monkeypatch):
     assert Path(path).exists()
     img = Image.open(path)
     assert img.size == (768, 768)
+
+
+def test_get_client_builds_inference_client_with_model_and_token(monkeypatch):
+    monkeypatch.setattr(image_module, "_client", None)
+    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
+
+    calls = []
+
+    class FakeInferenceClient:
+        def __init__(self, model=None, token=None):
+            calls.append({"model": model, "token": token})
+
+    monkeypatch.setattr(image_module, "InferenceClient", FakeInferenceClient)
+
+    client = image_module._get_client()
+
+    assert calls == [{"model": "black-forest-labs/FLUX.1-schnell", "token": "hf_fake_token"}]
+    assert isinstance(client, FakeInferenceClient)
+
+    # A second call must reuse the cached client, not construct a new one.
+    image_module._get_client()
+    assert len(calls) == 1
+
+
+def test_get_client_raises_clear_error_without_hf_token(monkeypatch):
+    monkeypatch.setattr(image_module, "_client", None)
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+
+    try:
+        image_module._get_client()
+        assert False, "expected RuntimeError"
+    except RuntimeError as exc:
+        assert "HF_TOKEN" in str(exc)

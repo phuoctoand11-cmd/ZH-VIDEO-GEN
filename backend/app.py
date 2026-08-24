@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pathlib import Path
 
@@ -105,4 +106,7 @@ def build_app() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    build_app().launch()
+    # Render (and most PaaS hosts) assign the listen port via $PORT and expect
+    # the process to bind 0.0.0.0, not the Gradio default of 127.0.0.1:7860.
+    port = int(os.environ.get("PORT", 7860))
+    build_app().launch(server_name="0.0.0.0", server_port=port)
