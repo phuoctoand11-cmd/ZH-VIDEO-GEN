@@ -7,6 +7,7 @@ from audio.templates import list_templates
 from content.auto import gemini_llm_call, generate_lesson
 from content.manual import parse_manual_input
 from pipeline import run_pipeline
+from render.assemble import ASPECT_SIZES
 
 TEMPLATES_DIR = Path(__file__).parent / "config" / "templates"
 
@@ -17,29 +18,58 @@ def _load_templates():
 
 
 def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
-    templates = _load_templates()
-    template = templates[template_name]
+    """Entry point for both the Gradio UI and external API callers.
 
-    if mode == "Nhập danh sách":
-        items, errors = parse_manual_input(csv_text)
-        warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
-    else:
-        items = generate_lesson(topic, gemini_llm_call)
-        warnings = []
+    Always returns a 3-tuple (video_9_16, video_16_9, log_text); any failure is
+    reported in the log text instead of propagating a traceback to the caller.
+    """
+    try:
+        templates = _load_templates()
+        if template_name not in templates:
+            valid = ", ".join(templates)
+            return None, None, (
+                f"Lỗi: template không hợp lệ '{template_name}'. Các template hợp lệ: {valid}."
+            )
+        template = templates[template_name]
 
-    if not items:
-        message = "Không có mục hợp lệ để tạo video.\n" + "\n".join(warnings)
-        return None, None, message
+        aspect_ratios = list(aspect_ratios or [])
+        if not aspect_ratios:
+            return None, None, (
+                "Lỗi: chưa chọn tỉ lệ khung hình nào. "
+                "Hãy chọn ít nhất một tỉ lệ (9:16 hoặc 16:9)."
+            )
+        invalid_ratios = [r for r in aspect_ratios if r not in ASPECT_SIZES]
+        if invalid_ratios:
+            valid = ", ".join(ASPECT_SIZES)
+            return None, None, (
+                f"Lỗi: tỉ lệ khung hình không hợp lệ: {', '.join(map(str, invalid_ratios))}. "
+                f"Các tỉ lệ hợp lệ: {valid}."
+            )
 
-    work_dir = tempfile.mkdtemp(prefix="zhvideo_")
-    result = run_pipeline(items, template, aspect_ratios, work_dir)
+        if mode == "Nhập danh sách":
+            items, errors = parse_manual_input(csv_text)
+            warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
+        else:
+            items = generate_lesson(topic, gemini_llm_call)
+            warnings = []
 
-    log_lines = warnings + [f"Lỗi mục '{e.item.hanzi}': {e.error}" for e in result.item_errors]
-    log_lines += [f"Lỗi dựng video ({ratio}): {msg}" for ratio, msg in result.assembly_errors.items()]
-    video_9_16 = result.video_paths.get("9:16")
-    video_16_9 = result.video_paths.get("16:9")
-    log_text = "\n".join(log_lines) if log_lines else "Hoàn tất, không có lỗi."
-    return video_9_16, video_16_9, log_text
+        if not items:
+            message = "Không có mục hợp lệ để tạo video.\n" + "\n".join(warnings)
+            return None, None, message
+
+        work_dir = tempfile.mkdtemp(prefix="zhvideo_")
+        result = run_pipeline(items, template, aspect_ratios, work_dir)
+
+        log_lines = warnings + [f"Lỗi mục '{e.item.hanzi}': {e.error}" for e in result.item_errors]
+        log_lines += [
+            f"Lỗi dựng video ({ratio}): {msg}" for ratio, msg in result.assembly_errors.items()
+        ]
+        video_9_16 = result.video_paths.get("9:16")
+        video_16_9 = result.video_paths.get("16:9")
+        log_text = "\n".join(log_lines) if log_lines else "Hoàn tất, không có lỗi."
+        return video_9_16, video_16_9, log_text
+    except Exception as exc:  # noqa: BLE001 - public API must never leak a raw traceback
+        return None, None, f"Lỗi: {exc}"
 
 
 def build_app() -> gr.Blocks:
