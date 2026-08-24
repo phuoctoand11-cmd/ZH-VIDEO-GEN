@@ -28,6 +28,21 @@ PROMPT_TEMPLATE = (
 )
 
 
+def _strip_code_fence(raw_response: str) -> str:
+    """Strip a surrounding markdown code fence from an LLM response, if present.
+
+    Gemini frequently wraps JSON in ```json ... ``` despite being told not to.
+    """
+    text = (raw_response or "").strip()
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    lines = lines[1:]  # drop the opening ``` / ```json line
+    if lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
 def generate_lesson(
     topic: str, llm_call: Callable[[str], str], max_retries: int = 1
 ) -> list[LessonItem]:
@@ -36,7 +51,7 @@ def generate_lesson(
     for _attempt in range(max_retries + 1):
         raw_response = llm_call(prompt)
         try:
-            data = json.loads(raw_response)
+            data = json.loads(_strip_code_fence(raw_response))
             parsed = _RawLesson(**data)
             return [
                 LessonItem(hanzi=i.hanzi, pinyin=i.pinyin, meaning_vi=i.meaning_vi)
@@ -56,6 +71,9 @@ def gemini_llm_call(prompt: str) -> str:
     if not api_key:
         raise AutoGenerationError("GEMINI_API_KEY environment variable is not set")
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    response = model.generate_content(
+        prompt,
+        generation_config={"response_mime_type": "application/json"},
+    )
     return response.text

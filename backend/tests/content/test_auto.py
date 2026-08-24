@@ -25,6 +25,28 @@ def test_generate_lesson_retries_on_invalid_json():
     assert items[0].hanzi == "喝"
 
 
+def test_generate_lesson_parses_fenced_json():
+    def fenced_llm(prompt: str) -> str:
+        return (
+            "```json\n"
+            '{"items": [{"hanzi": "喝", "pinyin": "hē", "meaning_vi": "uống"}]}\n'
+            "```"
+        )
+
+    items = generate_lesson("đồ uống", fenced_llm)
+    assert len(items) == 1
+    assert items[0].hanzi == "喝"
+    assert items[0].meaning_vi == "uống"
+
+
+def test_generate_lesson_parses_bare_fenced_json():
+    def fenced_llm(prompt: str) -> str:
+        return '```\n{"items": [{"hanzi": "吃", "meaning_vi": "ăn"}]}\n```\n'
+
+    items = generate_lesson("đồ ăn", fenced_llm)
+    assert items[0].hanzi == "吃"
+
+
 def test_generate_lesson_raises_after_max_retries():
     def always_bad(prompt: str) -> str:
         return "still not json"
