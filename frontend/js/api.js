@@ -43,7 +43,10 @@ export async function callGenerateVideo(state, { spaceUrl, connectClient, onStat
   const payload = buildApiPayload(state);
   // submit() returns an async-iterable job that yields "status" events while
   // the Space queues/generates and a "data" event carrying the outputs.
-  const job = client.submit(ENDPOINT, payload);
+  // The 5th arg (all_events) must be true, or a default-options @gradio/client
+  // only forwards "data" events and every status/error-stage event is dropped
+  // before it ever reaches this loop.
+  const job = client.submit(ENDPOINT, payload, null, null, true);
 
   let finalData = null;
   let receivedData = false;

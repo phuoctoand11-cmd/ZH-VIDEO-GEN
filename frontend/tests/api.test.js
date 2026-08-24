@@ -19,9 +19,14 @@ const LIST_STATE = {
 
 test("callGenerateVideo builds the payload, calls the named endpoint, and parses the result", async () => {
   const fakeClient = {
-    submit: (endpoint, payload) => {
+    submit: (endpoint, payload, ...rest) => {
       assert.equal(endpoint, "/generate_video");
       assert.deepEqual(payload, ["Nhập danh sách", "吃,chī,ăn", "", "zh-zh-vi", ["9:16"]]);
+      // A default-options @gradio/client only forwards "data" events unless
+      // all_events (the 5th positional arg) is true — this must stay true or
+      // every status/error-stage event is silently dropped before this test
+      // (or production) ever sees it.
+      assert.deepEqual(rest, [null, null, true]);
       return fakeJob([
         { type: "status", stage: "pending", queue: true, position: 1, size: 2 },
         { type: "status", stage: "generating", queue: false },
