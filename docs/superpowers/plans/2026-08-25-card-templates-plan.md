@@ -1802,7 +1802,7 @@ def test_generate_video_catches_pipeline_exception(monkeypatch):
 - [ ] **Step 3: Chạy test**
 
 Run: `cd backend && pytest tests/test_app.py -v`
-Expected: 10 passed
+Expected: 11 passed
 
 - [ ] **Step 4: Commit**
 
@@ -1920,7 +1920,7 @@ test("rejects unknown mode", () => {
 - [ ] **Step 4: Chạy test**
 
 Run: `cd frontend && node --test`
-Expected: tất cả pass (24 test cũ - 3 test cũ bị thay + 4 test mới trong validation.test.js, các file test khác không đổi)
+Expected: tất cả pass. `validation.test.js` có 7 test (thay "auto mode rejects empty topic" bằng 2 test theo 2 mode chủ đề mới + 1 test "accepts a filled topic" mới); các file test khác không đổi.
 
 - [ ] **Step 5: Commit**
 
