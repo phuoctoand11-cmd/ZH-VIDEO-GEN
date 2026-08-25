@@ -6,6 +6,16 @@ from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw
 
 MODEL_ID = "black-forest-labs/FLUX.1-schnell"
+
+# Small local pastel palette for the text-free placeholder image (see
+# make_placeholder_image below). Deliberately not imported from render.theme
+# to keep visuals/ from depending on render/.
+_PLACEHOLDER_PALETTE = [
+    (255, 182, 193),  # pastel pink
+    (173, 216, 230),  # pastel blue
+    (183, 235, 183),  # pastel green
+    (255, 218, 170),  # pastel orange
+]
 # huggingface_hub's InferenceClient has no read timeout by default, so a
 # stalled/cold shared endpoint would hang the request indefinitely instead of
 # falling through to the retry/placeholder path below.
@@ -30,9 +40,28 @@ def _generate(prompt: str, width: int = 768, height: int = 768, steps: int = 4) 
 
 
 def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Image.Image:
-    image = Image.new("RGB", size, color=(60, 60, 90))
+    """Text-free fallback used when AI image generation fails. This project's
+    core design invariant is "AI never renders text, only code does" — this
+    placeholder is composited directly as a mascot/avatar on the learning
+    card, so it must never draw literal characters (that would put
+    AI-adjacent/English text into a slot the rest of the app treats as pure
+    graphics). Instead: a near-white background (so render.theme's white
+    knockout composites it cleanly, like a real generated mascot) with a
+    plain pastel circle, colored deterministically from `text` so repeated
+    prompts still look visually distinct from one another.
+    """
+    width, height = size
+    background = (250, 250, 250)
+    image = Image.new("RGB", size, color=background)
     draw = ImageDraw.Draw(image)
-    draw.text((20, size[1] // 2), text, fill=(255, 255, 255))
+
+    color_index = int(hashlib.sha256(text.encode()).hexdigest(), 16) % len(_PLACEHOLDER_PALETTE)
+    color = _PLACEHOLDER_PALETTE[color_index]
+
+    radius = int(min(width, height) * 0.32)
+    cx, cy = width // 2, height // 2
+    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=color)
+
     return image
 
 

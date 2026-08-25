@@ -7,9 +7,16 @@ def build_mascot_prompt(icon_prompt: str) -> str:
 
 
 def build_avatar_prompt(speaker_name: str) -> str:
+    # speaker_name is intentionally unused in the prompt text: quoted proper
+    # nouns are a known trigger for diffusion models to render the string as
+    # visible text, which fights the "no text" instruction below. The name
+    # is already drawn as real text separately by render/dialogue_card.py,
+    # so the AI avatar doesn't need it. Kept as a parameter for call-site
+    # API compatibility.
+    del speaker_name
     return (
-        f"A cute chibi avatar portrait of a friendly cartoon character named "
-        f"'{speaker_name}'. Flat vector style, bright pastel colors, thick outline, "
-        f"centered on a plain white background, no text, no letters, no watermark, "
-        f"kawaii mascot style, head and shoulders only."
+        "A cute chibi avatar portrait of a friendly cartoon character. Flat vector "
+        "style, bright pastel colors, thick outline, centered on a plain white "
+        "background, no text, no letters, no watermark, kawaii mascot style, head "
+        "and shoulders only."
     )

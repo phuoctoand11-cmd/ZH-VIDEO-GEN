@@ -7,7 +7,7 @@ def test_build_mascot_prompt_includes_icon_prompt_and_no_text_request():
     assert "no text" in prompt
 
 
-def test_build_avatar_prompt_includes_speaker_name_and_no_text_request():
+def test_build_avatar_prompt_excludes_speaker_name_and_includes_no_text_request():
     prompt = build_avatar_prompt("Minh")
-    assert "Minh" in prompt
+    assert "Minh" not in prompt
     assert "no text" in prompt

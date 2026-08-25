@@ -19,11 +19,16 @@ def make_highlight_clip(
 
     target_w, target_h = size
     source = Image.open(image_path).convert("RGB")
-    cover_scale = max(target_w / source.width, target_h / source.height)
+    # Over-scale by 1/zoom_height_frac (not just to "cover") so that a
+    # zoom_height_frac-tall crop window, once resized back up to target_h,
+    # is native resolution rather than an upscaled blur. Without this
+    # extra factor, a source already at exactly `size` (the production
+    # case) produces a crop_h clamped to the full frame — a no-op zoom.
+    cover_scale = max(target_w / source.width, target_h / source.height) / zoom_height_frac
     scaled = source.resize((int(source.width * cover_scale), int(source.height * cover_scale)))
     frame_w, frame_h = scaled.size
 
-    crop_h = max(target_h, min(int(frame_h * zoom_height_frac), frame_h))
+    crop_h = min(int(frame_h * zoom_height_frac), frame_h)
     crop_w = min(int(crop_h * target_w / target_h), frame_w)
 
     boundaries: list[float] = []

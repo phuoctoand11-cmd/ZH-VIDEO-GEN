@@ -12,7 +12,7 @@ Xem thiết kế đầy đủ tại `docs/superpowers/specs/2026-08-24-zh-video-
 4. **Billing**: Instance-based (CPU luôn cấp phát) — cần thiết vì Gradio xử lý video ở tác vụ nền tách khỏi luồng request; Request-based sẽ throttle CPU và khiến request bị treo.
 5. **Networking**: bật **Session affinity**.
 6. **Environment Variables**:
-   - `GROQ_API_KEY` — key free tier từ [console.groq.com/keys](https://console.groq.com/keys), dùng cho chế độ "chủ đề tự động". Không cần thẻ tín dụng, không ràng buộc billing account.
+   - `GROQ_API_KEY` — key free tier từ [console.groq.com/keys](https://console.groq.com/keys), dùng cho 2 chế độ theo chủ đề ("Từ vựng theo chủ đề" và "Hội thoại theo chủ đề"). Không cần thẻ tín dụng, không ràng buộc billing account.
    - `GROQ_MODEL` — tùy chọn, mặc định `llama-3.3-70b-versatile`. Đặt biến này nếu Groq ngừng hỗ trợ model mặc định, không cần sửa code.
    - `HF_TOKEN` — access token (quyền **Read**) tạo tại [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens), dùng để gọi Inference API sinh ảnh.
 7. Deploy. Cloud Build sẽ tự động build image từ `Dockerfile`, cài ffmpeg + dependencies, rồi chạy `python app.py` — app tự lắng nghe cổng Cloud Run cấp qua biến `$PORT`.
@@ -22,7 +22,7 @@ Xem thiết kế đầy đủ tại `docs/superpowers/specs/2026-08-24-zh-video-
 ```bash
 cd backend
 pip install -r requirements.txt
-export GROQ_API_KEY=...   # chỉ cần cho chế độ chủ đề tự động
+export GROQ_API_KEY=...   # chỉ cần cho 2 chế độ theo chủ đề (từ vựng / hội thoại)
 export HF_TOKEN=...        # bắt buộc để sinh ảnh
 python app.py
 ```

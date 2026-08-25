@@ -1,5 +1,5 @@
 import app as app_module
-from app import _load_templates
+from app import MAX_VOCAB_ITEMS, _load_templates
 
 
 def test_load_templates_includes_expected_names():
@@ -77,6 +77,71 @@ def test_generate_video_manual_mode_routes_to_vocab_card_pipeline(monkeypatch):
     assert calls["count"] == 1
     assert video_9_16 == "out.mp4"
     assert log == "Hoàn tất, không có lỗi."
+
+
+def _csv_with_n_rows(n):
+    header = "hanzi,pinyin,meaning_vi"
+    rows = [f"字{i},zi{i},nghia {i}" for i in range(n)]
+    return "\n".join([header] + rows)
+
+
+def test_generate_video_manual_mode_rejects_too_many_items(monkeypatch):
+    def unexpected(*args, **kwargs):
+        raise AssertionError("run_vocab_card_pipeline must not be called over the item cap")
+
+    monkeypatch.setattr(app_module, "run_vocab_card_pipeline", unexpected)
+    csv_text = _csv_with_n_rows(MAX_VOCAB_ITEMS + 1)
+    video_9_16, video_16_9, log = app_module.generate_video(
+        "Nhập danh sách", csv_text, "", "zh-zh-vi", ["9:16"]
+    )
+    assert video_9_16 is None
+    assert video_16_9 is None
+    assert log.startswith("Lỗi:")
+    assert str(MAX_VOCAB_ITEMS + 1) in log
+    assert str(MAX_VOCAB_ITEMS) in log
+
+
+def test_generate_video_manual_mode_allows_exactly_max_items(monkeypatch):
+    from pipeline import PipelineResult
+
+    calls = {"count": 0}
+
+    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir):
+        calls["count"] += 1
+        assert len(vocab_result.items) == MAX_VOCAB_ITEMS
+        return PipelineResult(video_paths={"9:16": "out.mp4"})
+
+    monkeypatch.setattr(app_module, "run_vocab_card_pipeline", fake_pipeline)
+    csv_text = _csv_with_n_rows(MAX_VOCAB_ITEMS)
+    video_9_16, _, log = app_module.generate_video(
+        "Nhập danh sách", csv_text, "", "zh-zh-vi", ["9:16"]
+    )
+    assert calls["count"] == 1
+    assert video_9_16 == "out.mp4"
+    assert log == "Hoàn tất, không có lỗi."
+
+
+def test_generate_video_manual_mode_handles_none_csv_text(monkeypatch):
+    def unexpected(*args, **kwargs):
+        raise AssertionError("run_vocab_card_pipeline must not be called with no items")
+
+    monkeypatch.setattr(app_module, "run_vocab_card_pipeline", unexpected)
+    video_9_16, video_16_9, log = app_module.generate_video(
+        "Nhập danh sách", None, "", "zh-zh-vi", ["9:16"]
+    )
+    assert video_9_16 is None
+    assert video_16_9 is None
+    assert not log.startswith("Lỗi: '")  # no raw AttributeError leaked through
+
+
+def test_generate_video_topic_mode_handles_none_topic():
+    video_9_16, video_16_9, log = app_module.generate_video(
+        "Từ vựng theo chủ đề", "", None, "zh-zh-vi", ["9:16"]
+    )
+    assert video_9_16 is None
+    assert video_16_9 is None
+    assert log.startswith("Lỗi:")
+    assert "chủ đề" in log
 
 
 def test_generate_video_vocab_topic_mode_requires_topic():

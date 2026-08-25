@@ -17,6 +17,14 @@ TEMPLATES_DIR = Path(__file__).parent / "config" / "templates"
 
 MODES = ["Nhập danh sách", "Từ vựng theo chủ đề", "Hội thoại theo chủ đề"]
 
+# render.vocab_card.draw_vocab_card uses a fixed-height row layout with no
+# per-item font-size floor, so it crashes (font size 0) once rows get too
+# thin. Empirically the smallest confirmed-safe count across ASPECT_SIZES
+# (manual-list mode never sets a header) is 19 items at 16:9 (1280x720) —
+# fails at 20. 35 items still render fine at 9:16 (720x1280). MAX_VOCAB_ITEMS
+# is set with a 3-item safety margin below the tighter (16:9) limit.
+MAX_VOCAB_ITEMS = 16
+
 
 def _load_templates():
     templates = list_templates(TEMPLATES_DIR)
@@ -58,11 +66,16 @@ def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
         work_dir = tempfile.mkdtemp(prefix="zhvideo_")
 
         if mode == "Nhập danh sách":
-            items, errors = parse_manual_input(csv_text)
+            items, errors = parse_manual_input(csv_text or "")
             warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
             if not items:
                 message = "Không có mục hợp lệ để tạo video.\n" + "\n".join(warnings)
                 return None, None, message
+            if len(items) > MAX_VOCAB_ITEMS:
+                return None, None, (
+                    f"Lỗi: danh sách có {len(items)} mục, vượt quá giới hạn {MAX_VOCAB_ITEMS} "
+                    "mục cho phép. Vui lòng chia nhỏ danh sách."
+                )
             vocab_result = VocabTopicResult(
                 items=[
                     VocabCardItem(
@@ -75,14 +88,14 @@ def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
             log_lines = list(warnings)
 
         elif mode == "Từ vựng theo chủ đề":
-            if not topic.strip():
+            if not (topic or "").strip():
                 return None, None, "Lỗi: chưa nhập chủ đề/bộ thủ."
             vocab_result = generate_vocab_topic(topic, groq_llm_call)
             result = run_vocab_card_pipeline(vocab_result, template, aspect_ratios, work_dir)
             log_lines = []
 
         else:  # "Hội thoại theo chủ đề"
-            if not topic.strip():
+            if not (topic or "").strip():
                 return None, None, "Lỗi: chưa nhập chủ đề."
             dialogue_result = generate_dialogue_topic(topic, groq_llm_call)
             result = run_dialogue_pipeline(dialogue_result, template, aspect_ratios, work_dir)
