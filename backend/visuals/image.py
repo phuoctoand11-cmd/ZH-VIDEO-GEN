@@ -6,6 +6,10 @@ from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw
 
 MODEL_ID = "black-forest-labs/FLUX.1-schnell"
+# huggingface_hub's InferenceClient has no read timeout by default, so a
+# stalled/cold shared endpoint would hang the request indefinitely instead of
+# falling through to the retry/placeholder path below.
+REQUEST_TIMEOUT_SECONDS = 60
 
 _client = None
 
@@ -16,7 +20,7 @@ def _get_client() -> InferenceClient:
         token = os.environ.get("HF_TOKEN")
         if not token:
             raise RuntimeError("HF_TOKEN environment variable is not set")
-        _client = InferenceClient(model=MODEL_ID, token=token)
+        _client = InferenceClient(model=MODEL_ID, token=token, timeout=REQUEST_TIMEOUT_SECONDS)
     return _client
 
 
