@@ -36,14 +36,20 @@ def test_get_client_builds_inference_client_with_model_and_token(monkeypatch):
     calls = []
 
     class FakeInferenceClient:
-        def __init__(self, model=None, token=None):
-            calls.append({"model": model, "token": token})
+        def __init__(self, model=None, token=None, timeout=None):
+            calls.append({"model": model, "token": token, "timeout": timeout})
 
     monkeypatch.setattr(image_module, "InferenceClient", FakeInferenceClient)
 
     client = image_module._get_client()
 
-    assert calls == [{"model": "black-forest-labs/FLUX.1-schnell", "token": "hf_fake_token"}]
+    assert calls == [
+        {
+            "model": "black-forest-labs/FLUX.1-schnell",
+            "token": "hf_fake_token",
+            "timeout": image_module.REQUEST_TIMEOUT_SECONDS,
+        }
+    ]
     assert isinstance(client, FakeInferenceClient)
 
     # A second call must reuse the cached client, not construct a new one.
