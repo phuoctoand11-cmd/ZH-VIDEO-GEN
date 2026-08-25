@@ -1,3 +1,15 @@
+import hashlib
+
+_AVATAR_VARIANTS = [
+    "with short black hair and a blue shirt",
+    "with curly brown hair and a yellow sweater",
+    "with a ponytail and a green jacket",
+    "with glasses and a red hoodie",
+    "with a bob haircut and an orange scarf",
+    "with spiky hair and a purple t-shirt",
+]
+
+
 def build_mascot_prompt(icon_prompt: str) -> str:
     return (
         f"A cute chibi sticker illustration of {icon_prompt}. Flat vector style, "
@@ -7,16 +19,22 @@ def build_mascot_prompt(icon_prompt: str) -> str:
 
 
 def build_avatar_prompt(speaker_name: str) -> str:
-    # speaker_name is intentionally unused in the prompt text: quoted proper
-    # nouns are a known trigger for diffusion models to render the string as
-    # visible text, which fights the "no text" instruction below. The name
-    # is already drawn as real text separately by render/dialogue_card.py,
-    # so the AI avatar doesn't need it. Kept as a parameter for call-site
-    # API compatibility.
-    del speaker_name
+    # speaker_name is intentionally never spliced into the prompt as a literal
+    # proper noun: quoted proper nouns are a known trigger for diffusion
+    # models to render the string as visible text, which fights the "no
+    # text" instruction below. The name is already drawn as real text
+    # separately by render/dialogue_card.py, so the AI avatar doesn't need
+    # it. Instead, the name is hashed to deterministically pick a short
+    # visual-variant descriptor phrase, so different speakers still get
+    # different prompts (and therefore different cached avatar images via
+    # visuals/image.py's sha256(prompt) cache) without ever naming them.
+    variant_index = int(hashlib.sha256(speaker_name.encode()).hexdigest(), 16) % len(
+        _AVATAR_VARIANTS
+    )
+    variant = _AVATAR_VARIANTS[variant_index]
     return (
-        "A cute chibi avatar portrait of a friendly cartoon character. Flat vector "
-        "style, bright pastel colors, thick outline, centered on a plain white "
-        "background, no text, no letters, no watermark, kawaii mascot style, head "
-        "and shoulders only."
+        f"A cute chibi avatar portrait of a friendly cartoon character {variant}. "
+        f"Flat vector style, bright pastel colors, thick outline, centered on a plain "
+        f"white background, no text, no letters, no watermark, kawaii mascot style, "
+        f"head and shoulders only."
     )

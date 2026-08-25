@@ -52,19 +52,23 @@ def test_make_highlight_clip_rejects_empty_regions(tmp_path):
         make_highlight_clip(_make_card(tmp_path), y_centers=[], durations=[], size=(720, 1280))
 
 
-def test_make_highlight_clip_zooms_to_different_rows_when_source_matches_target_size(tmp_path):
-    """Regression test for the row-zoom no-op bug: when the source card is
-    exactly the target size (the real production case — pipeline.py draws
-    the vocab card at exactly `size`), each row's crop window must still
-    differ, producing visibly different frames per row instead of a static
-    full-frame image.
+def test_make_highlight_clip_zooms_to_different_rows_when_source_is_taller_than_target(tmp_path):
+    """Regression test for the row-zoom no-op bug: when the source card is a
+    taller "master" canvas than the target output size (the real production
+    shape — pipeline.py now draws the vocab card at a taller render_size and
+    make_highlight_clip pans a full-width window down it), each row's crop
+    window must still differ, producing visibly different frames per row
+    instead of a static full-frame image.
     """
-    size = (720, 1280)
-    card_path = _make_banded_card(tmp_path, size)
+    source_size = (720, 3200)
+    target_size = (720, 1280)
+    card_path = _make_banded_card(tmp_path, source_size)
     y_centers = [0.15, 0.5, 0.85]
     durations = [1.0, 1.0, 1.0]
 
-    clip = make_highlight_clip(card_path, y_centers=y_centers, durations=durations, size=size)
+    clip = make_highlight_clip(
+        card_path, y_centers=y_centers, durations=durations, size=target_size
+    )
 
     frames = [clip.get_frame(t) for t in (0.5, 1.5, 2.5)]
 

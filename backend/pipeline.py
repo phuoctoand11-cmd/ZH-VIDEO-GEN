@@ -13,7 +13,7 @@ from content.schema import (
 from moviepy import AudioFileClip, concatenate_audioclips
 from render.assemble import ASPECT_SIZES, assemble_video, build_static_scene_clip
 from render.dialogue_card import draw_dialogue_turn
-from render.highlight import make_highlight_clip
+from render.highlight import DEFAULT_ZOOM_HEIGHT_FRAC, make_highlight_clip
 from render.vocab_card import draw_vocab_card, row_regions
 from visuals.image import generate_image
 from visuals.prompt_builder import build_avatar_prompt, build_mascot_prompt
@@ -80,10 +80,12 @@ def run_vocab_card_pipeline(
     for ratio in aspect_ratios:
         size = ASPECT_SIZES[ratio]
         try:
-            card = draw_vocab_card(result, mascot_paths, size)
+            target_w, target_h = size
+            render_size = (target_w, int(target_h / DEFAULT_ZOOM_HEIGHT_FRAC))
+            card = draw_vocab_card(result, mascot_paths, render_size)
             card_path = f"{work_dir}/vocab_card_{ratio.replace(':', 'x')}.png"
             card.save(card_path)
-            y_centers = row_regions(size, len(items), has_header)
+            y_centers = row_regions(render_size, len(items), has_header)
             clip = make_highlight_clip(card_path, y_centers, row_durations, size)
             audio_clips = [AudioFileClip(p) for p in all_audio_paths]
             clip = clip.with_audio(concatenate_audioclips(audio_clips))
