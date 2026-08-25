@@ -82,7 +82,12 @@ def build_app() -> gr.Blocks:
         mode = gr.Radio(
             ["Nhập danh sách", "Chủ đề tự động"], value="Nhập danh sách", label="Chế độ nhập"
         )
-        csv_text = gr.Textbox(label="Danh sách CSV (hanzi,pinyin,meaning_vi)", lines=8)
+        csv_text = gr.Textbox(
+            label="Danh sách CSV (hanzi,pinyin,meaning_vi)",
+            placeholder="你好,nǐ hǎo,xin chào\n谢谢,xiè xie,cảm ơn",
+            info="Mỗi dòng một mục, theo thứ tự hanzi,pinyin,meaning_vi (không cần dòng tiêu đề).",
+            lines=8,
+        )
         topic = gr.Textbox(label="Chủ đề (chế độ tự động)")
         template_name = gr.Dropdown(
             template_names, value=template_names[0], label="Template trình tự audio"

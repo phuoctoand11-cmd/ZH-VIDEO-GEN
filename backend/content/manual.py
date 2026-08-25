@@ -3,6 +3,8 @@ import io
 
 from content.schema import LessonItem
 
+EXPECTED_HEADER = ["hanzi", "pinyin", "meaning_vi"]
+
 
 class ManualParseError(Exception):
     def __init__(self, line_number: int, message: str):
@@ -11,14 +13,32 @@ class ManualParseError(Exception):
         super().__init__(f"line {line_number}: {message}")
 
 
+def _looks_like_header(row: list[str]) -> bool:
+    normalized = [cell.strip().lower() for cell in row]
+    return normalized[: len(EXPECTED_HEADER)] == EXPECTED_HEADER
+
+
 def parse_manual_input(csv_text: str) -> tuple[list[LessonItem], list[ManualParseError]]:
-    reader = csv.DictReader(io.StringIO(csv_text.strip()))
+    raw_rows = list(csv.reader(io.StringIO(csv_text.strip())))
+
+    # The UI label only describes the column order ("hanzi,pinyin,meaning_vi");
+    # it doesn't tell users a literal header line is required. Auto-detect one
+    # instead of silently discarding a user's first data row as a header.
+    if raw_rows and _looks_like_header(raw_rows[0]):
+        data_rows = raw_rows[1:]
+        start_line = 2
+    else:
+        data_rows = raw_rows
+        start_line = 1
+
     items: list[LessonItem] = []
     errors: list[ManualParseError] = []
-    for line_number, row in enumerate(reader, start=2):
-        hanzi = (row.get("hanzi") or "").strip()
-        meaning_vi = (row.get("meaning_vi") or "").strip()
-        pinyin_value = (row.get("pinyin") or "").strip() or None
+    for offset, row in enumerate(data_rows):
+        line_number = start_line + offset
+        row_dict = dict(zip(EXPECTED_HEADER, row))
+        hanzi = (row_dict.get("hanzi") or "").strip()
+        meaning_vi = (row_dict.get("meaning_vi") or "").strip()
+        pinyin_value = (row_dict.get("pinyin") or "").strip() or None
         if not hanzi:
             errors.append(ManualParseError(line_number, "missing hanzi"))
             continue
