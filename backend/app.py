@@ -5,7 +5,7 @@ from pathlib import Path
 import gradio as gr
 
 from audio.templates import list_templates
-from content.auto import gemini_llm_call, generate_lesson
+from content.auto import generate_lesson, groq_llm_call
 from content.manual import parse_manual_input
 from pipeline import run_pipeline
 from render.assemble import ASPECT_SIZES
@@ -51,7 +51,7 @@ def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
             items, errors = parse_manual_input(csv_text)
             warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
         else:
-            items = generate_lesson(topic, gemini_llm_call)
+            items = generate_lesson(topic, groq_llm_call)
             warnings = []
 
         if not items:
