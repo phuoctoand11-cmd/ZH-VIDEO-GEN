@@ -69,8 +69,12 @@ def generate_lesson(
 # auto-upgraded to a paid prepay tier the moment any Cloud billing account
 # was linked anywhere under the same Google identity. GROQ_MODEL is
 # overridable via env var so a future model retirement (as happened with
-# gemini-2.0-flash) doesn't require a code change to fix.
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+# gemini-2.0-flash, and with llama-3.3-70b-versatile being dropped from
+# Groq's own catalog before this even shipped) doesn't require a code
+# change to fix. Verified live in the Groq Playground against this
+# account's actual model list, not guessed from docs (which still listed
+# the now-404ing llama models).
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 
 
 def groq_llm_call(prompt: str) -> str:
