@@ -71,7 +71,9 @@ def gemini_llm_call(prompt: str) -> str:
     if not api_key:
         raise AutoGenerationError("GEMINI_API_KEY environment variable is not set")
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    # gemini-2.0-flash was retired; confirmed live via the Gemini API's own
+    # 404 error, which names gemini-3.6-flash as its replacement.
+    model = genai.GenerativeModel("gemini-3.6-flash")
     response = model.generate_content(
         prompt,
         generation_config={"response_mime_type": "application/json"},
