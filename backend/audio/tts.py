@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 import time
 from pathlib import Path
 
@@ -44,3 +45,17 @@ def get_audio_duration(path: str) -> float:
     `ffprobe` binary is required at runtime.
     """
     return float(MP3(str(path)).info.length)
+
+
+def make_silence(out_path: str, seconds: float) -> str:
+    """Generate a silent mp3 of the given duration, used as a fallback when
+    TTS fails for a single row/turn so the video doesn't lose that slot.
+    """
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+            "-t", str(seconds), str(out_path),
+        ],
+        check=True, capture_output=True,
+    )
+    return str(out_path)

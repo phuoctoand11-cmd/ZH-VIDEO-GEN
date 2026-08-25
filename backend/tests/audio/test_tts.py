@@ -62,3 +62,10 @@ def test_get_audio_duration(tmp_path):
     )
     duration = tts.get_audio_duration(str(audio_path))
     assert 1.9 <= duration <= 2.1
+
+
+def test_make_silence_creates_file_with_requested_duration(tmp_path):
+    out_path = tmp_path / "silence.mp3"
+    tts.make_silence(str(out_path), seconds=1.5)
+    assert out_path.exists()
+    assert abs(tts.get_audio_duration(str(out_path)) - 1.5) < 0.1
