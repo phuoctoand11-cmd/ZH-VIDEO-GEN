@@ -1,6 +1,6 @@
 # zh-video-gen backend
 
-Backend tạo video dạy tiếng Trung song ngữ Việt-Trung: soạn nội dung (thủ công hoặc tự động qua [Groq](https://console.groq.com)), tổng hợp giọng đọc (edge-tts), sinh ảnh minh họa qua [Hugging Face Inference API](https://huggingface.co/docs/inference-providers) (không tự host model), rồi ghép video bằng moviepy/ffmpeg. Expose qua Gradio app (`app.py`), deploy trên [Google Cloud Run](https://cloud.google.com/run).
+Backend tạo video dạy tiếng Trung song ngữ Việt-Trung, hỗ trợ 3 chế độ: **Nhập danh sách** (từ vựng tự nhập thủ công), **Từ vựng theo chủ đề** (tự soạn qua [Groq](https://console.groq.com) từ một chủ đề), và **Hội thoại theo chủ đề** (đoạn hội thoại 2 nhân vật, cũng tự soạn qua Groq). Video dùng card thiết kế sẵn theo template — chữ Hán/pinyin/nghĩa do code vẽ trực tiếp lên card (không phải overlay AI), AI qua [Hugging Face Inference API](https://huggingface.co/docs/inference-providers) (không tự host model) chỉ sinh ảnh mascot (chế độ từ vựng) hoặc avatar nhân vật (chế độ hội thoại), rồi ghép thành video bằng moviepy/ffmpeg kèm hiệu ứng zoom-highlight theo từng dòng/lượt thoại. Expose qua Gradio app (`app.py`), deploy trên [Google Cloud Run](https://cloud.google.com/run).
 
 Xem thiết kế đầy đủ tại `docs/superpowers/specs/2026-08-24-zh-video-gen-design.md` trong repo chính.
 
