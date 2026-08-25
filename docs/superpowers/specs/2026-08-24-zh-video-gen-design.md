@@ -8,7 +8,7 @@
 
 - Input: danh sách từ/câu nhập tay (CSV/text) **hoặc** 1 prompt chủ đề để LLM tự soạn bài — cả hai được hỗ trợ, chọn theo từng lần tạo.
 - Output: video mp4, chọn xuất 9:16, 16:9, hoặc cả hai. Trả trực tiếp cho người dùng tải về (không lưu trữ lâu dài trong v1).
-- Deploy: frontend trên Cloudflare Pages, backend xử lý trên Render.com (Docker web service).
+- Deploy: frontend trên Cloudflare Pages, backend xử lý trên Google Cloud Run (Docker container).
 - Không có CI; test chạy thủ công qua `pytest`.
 
 ## Kiến trúc
@@ -17,7 +17,7 @@ Hai phần triển khai riêng, giao tiếp qua Gradio API:
 
 ```
 zh-video-gen/
-  backend/                    # deploy lên Render.com (Docker web service)
+  backend/                    # deploy lên Google Cloud Run (Docker container)
     content/
       schema.py        # LessonItem: hanzi, pinyin, meaning_vi
       manual.py         # parse CSV/text nhập tay -> list[LessonItem]
@@ -36,13 +36,13 @@ zh-video-gen/
     pipeline.py             # điều phối toàn bộ luồng
     app.py                  # Gradio app — vừa là UI dự phòng, vừa expose API cho frontend gọi
     config/templates/*.json # các template trình tự audio (vd zh-zh-vi, zh-vi-zh)
-    Dockerfile               # cài ffmpeg + Python deps, chạy app.py — Render build từ đây
+    Dockerfile               # cài ffmpeg + Python deps, chạy app.py — Cloud Build build từ đây
     requirements.txt
-    README.md                # hướng dẫn deploy Render.com + biến môi trường cần thiết
+    README.md                # hướng dẫn deploy Cloud Run + biến môi trường cần thiết
     tests/                   # unit test cho phần logic thuần
   frontend/                   # deploy lên Cloudflare Pages
     index.html / src/         # form nhập liệu, chọn template, chọn tỉ lệ khung hình
-    (gọi backend qua @gradio/client tới URL Render)
+    (gọi backend qua @gradio/client tới URL Cloud Run)
 ```
 
 Mỗi module backend chỉ làm một việc, giao tiếp qua `LessonItem`/đường dẫn file — có thể test độc lập, và có thể thay TTS/model ảnh sau này mà không đụng phần khác. Logic xử lý (content/audio/visuals/render) không đổi so với thiết kế ban đầu — chỉ đổi nơi chạy và cách frontend/backend giao tiếp.
@@ -51,12 +51,12 @@ Mỗi module backend chỉ làm một việc, giao tiếp qua `LessonItem`/đư�
 
 - **Pinyin**: `pypinyin` — offline, không cần API.
 - **TTS**: `edge-tts` — miễn phí, không cần key, có giọng Trung (`zh-CN-XiaoxiaoNeural`...) và giọng Việt (`vi-VN-HoaiMyNeural`...) trong cùng thư viện.
-- **LLM soạn bài (auto mode)**: LLM free tier (Gemini/Groq free API) — trả JSON có schema validate bằng pydantic.
+- **LLM soạn bài (auto mode)**: **Groq free API** (`llama-3.3-70b-versatile` mặc định, đổi được qua biến `GROQ_MODEL`) — trả JSON có schema validate bằng pydantic. (Đã đổi từ Gemini — tài khoản Google Cloud bị tự động nâng cấp sang tier trả phí ("Prepay") ngay khi có bất kỳ billing account nào được gắn vào project cùng danh tính Google, kể cả project khác không liên quan; Groq là dịch vụ tách biệt hoàn toàn nên không gặp rủi ro này.)
 - **Ảnh AI**: FLUX.1-schnell qua **Hugging Face Inference API** (`huggingface_hub.InferenceClient.text_to_image`, xác thực bằng `HF_TOKEN`) — không tự host model, không cần GPU riêng, miễn phí trong quota chia sẻ của HF. (Đã đổi từ phương án ban đầu — tự host model qua `diffusers` trên ZeroGPU — vì tài khoản HF cần thêm billing/credit mới mở khóa được Gradio SDK trên Spaces.)
 - **Dựng video**: `moviepy`/`ffmpeg` — chạy trên CPU của backend, cài qua `Dockerfile`.
-- **Backend hosting**: Render.com (Docker web service, free tier) — sleep khi không có traffic, tự thức khi có request tới, tương tự trải nghiệm HF Spaces.
+- **Backend hosting**: Google Cloud Run (container, free tier theo vCPU-giây/GiB-giây/request hàng tháng) — scale-to-zero khi không có traffic. Billing đặt "Instance-based" (CPU luôn cấp phát) + bật Session affinity, vì Gradio xử lý video ở tác vụ nền tách khỏi luồng request — Request-based billing (mặc định) sẽ throttle CPU nền và khiến request treo vô thời hạn. (Đã đổi từ Render.com — free tier 512MB RAM không đủ, gây OOM khi dựng video.)
 - **Frontend hosting**: Cloudflare Pages — site tĩnh, build/deploy tự động khi push GitHub.
-- **Giao tiếp frontend↔backend**: `@gradio/client` (JS) gọi API của backend Render từ trình duyệt.
+- **Giao tiếp frontend↔backend**: `@gradio/client` (JS) gọi API của backend Cloud Run từ trình duyệt.
 - **Lưu trữ**: không có trong v1 — video trả thẳng cho người dùng tải ngay sau khi tạo xong.
 
 ## Data flow
@@ -75,12 +75,12 @@ Mỗi module backend chỉ làm một việc, giao tiếp qua `LessonItem`/đư�
 
 Nguyên tắc: một item lỗi không làm sập cả batch — xử lý từng item độc lập, gom lỗi báo cuối.
 
-- Parse thủ công: dòng thiếu chữ Hán → bỏ qua, cảnh báo trả về frontend.
+- Parse thủ công: dòng thiếu chữ Hán → bỏ qua, cảnh báo trả về frontend. Dòng đầu không khớp header `hanzi,pinyin,meaning_vi` → tự nhận diện là dữ liệu (không bắt buộc header).
 - LLM auto mode: validate JSON bằng pydantic; sai định dạng → retry 1 lần; vẫn sai → bỏ item.
 - TTS: lỗi mạng → retry 2 lần có backoff; vẫn lỗi → bỏ scene, đánh dấu lỗi.
-- Sinh ảnh: HF Inference API lỗi/timeout (hoặc thiếu `HF_TOKEN`) → giảm resolution/step, thử lại 1 lần; vẫn lỗi → dùng ảnh placeholder (nền màu + chữ).
+- Sinh ảnh: HF Inference API lỗi/timeout (hoặc thiếu `HF_TOKEN`) → giảm resolution/step, thử lại 1 lần; vẫn lỗi → dùng ảnh placeholder (nền màu + chữ). `InferenceClient` có timeout tường minh (60s) để không treo vô hạn khi endpoint HF chậm/cold.
 - Dựng video: lỗi ffmpeg → trả log lỗi trong response cho frontend hiển thị.
-- Frontend↔backend: backend đang "ngủ" (Render free tier, cold start) → frontend hiển thị trạng thái "đang khởi động server, vui lòng đợi" thay vì lỗi im lặng; timeout dài hơn bình thường cho request đầu tiên.
+- Frontend↔backend: backend đang "ngủ" (Cloud Run scale-to-zero, cold start) → frontend hiển thị trạng thái "đang khởi động server, vui lòng đợi" thay vì lỗi im lặng; timeout dài hơn bình thường cho request đầu tiên.
 
 ## Testing
 
@@ -92,9 +92,9 @@ Nguyên tắc: một item lỗi không làm sập cả batch — xử lý từng
 
 ## Deploy
 
-- **Backend**: push thư mục `backend/` lên GitHub, tạo Web Service trên Render.com kết nối repo, Root Directory = `backend`, runtime Docker (Render tự nhận `Dockerfile`). Cấu hình biến môi trường `GEMINI_API_KEY` và `HF_TOKEN` trong Settings → Environment.
-- **Frontend**: push thư mục `frontend/` lên GitHub, kết nối Cloudflare Pages với repo (không cần build command), tự deploy khi có commit mới. Cần cấu hình URL của backend Render (`frontend/js/config.js`) để frontend biết gọi API tới đâu.
-- Repo GitHub là 1 monorepo chứa cả `backend/` và `frontend/`; mỗi nền tảng deploy (Render, Cloudflare Pages) chỉ theo dõi thư mục con tương ứng.
+- **Backend**: push thư mục `backend/` lên GitHub, tạo Service trên Google Cloud Run kết nối repo qua Developer Connect, source location = `backend/Dockerfile`, memory ≥ 2 GiB, billing Instance-based, bật Session affinity. Cấu hình biến môi trường `GROQ_API_KEY` (+ `GROQ_MODEL` tùy chọn) và `HF_TOKEN` trong Variables & Secrets.
+- **Frontend**: push thư mục `frontend/` lên GitHub, kết nối Cloudflare Pages với repo (không cần build command), tự deploy khi có commit mới. Cần cấu hình URL của backend Cloud Run (`frontend/js/config.js`) để frontend biết gọi API tới đâu.
+- Repo GitHub là 1 monorepo chứa cả `backend/` và `frontend/`; mỗi nền tảng deploy (Cloud Build trigger, Cloudflare Pages) chỉ theo dõi thư mục con tương ứng — nhưng Cloud Build trigger hiện không lọc theo path nên mọi commit vào `main` (kể cả chỉ đổi `frontend/`) đều kích hoạt rebuild backend không cần thiết.
 
 ## Ngoài phạm vi (v1)
 

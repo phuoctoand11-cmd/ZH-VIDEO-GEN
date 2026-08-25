@@ -1,26 +1,29 @@
 # zh-video-gen backend
 
-Backend tạo video dạy tiếng Trung song ngữ Việt-Trung: soạn nội dung (thủ công hoặc Gemini), tổng hợp giọng đọc (edge-tts), sinh ảnh minh họa qua [Hugging Face Inference API](https://huggingface.co/docs/inference-providers) (không tự host model), rồi ghép video bằng moviepy/ffmpeg. Expose qua Gradio app (`app.py`), deploy trên [Render.com](https://render.com).
+Backend tạo video dạy tiếng Trung song ngữ Việt-Trung: soạn nội dung (thủ công hoặc tự động qua [Groq](https://console.groq.com)), tổng hợp giọng đọc (edge-tts), sinh ảnh minh họa qua [Hugging Face Inference API](https://huggingface.co/docs/inference-providers) (không tự host model), rồi ghép video bằng moviepy/ffmpeg. Expose qua Gradio app (`app.py`), deploy trên [Google Cloud Run](https://cloud.google.com/run).
 
 Xem thiết kế đầy đủ tại `docs/superpowers/specs/2026-08-24-zh-video-gen-design.md` trong repo chính.
 
-## Deploy lên Render.com
+## Deploy lên Google Cloud Run
 
-1. Tạo **Web Service** mới trên Render, kết nối repo GitHub này.
-2. **Root Directory**: `backend`
-3. **Runtime**: Docker (Render tự nhận diện `Dockerfile` trong root directory đã chọn).
-4. **Environment Variables** (Settings → Environment):
-   - `GEMINI_API_KEY` — key free tier từ [aistudio.google.com/apikey](https://aistudio.google.com/apikey), dùng cho chế độ "chủ đề tự động".
+1. Tạo **Service** mới trên Cloud Run, kết nối repo GitHub này qua Developer Connect (Continuously deploy from a repository).
+2. **Root Directory / Source location**: `backend/Dockerfile`
+3. **Memory**: tối thiểu 2 GiB (moviepy + Pillow + huggingface_hub cần nhiều RAM hơn mức mặc định 512 MiB).
+4. **Billing**: Instance-based (CPU luôn cấp phát) — cần thiết vì Gradio xử lý video ở tác vụ nền tách khỏi luồng request; Request-based sẽ throttle CPU và khiến request bị treo.
+5. **Networking**: bật **Session affinity**.
+6. **Environment Variables**:
+   - `GROQ_API_KEY` — key free tier từ [console.groq.com/keys](https://console.groq.com/keys), dùng cho chế độ "chủ đề tự động". Không cần thẻ tín dụng, không ràng buộc billing account.
+   - `GROQ_MODEL` — tùy chọn, mặc định `llama-3.3-70b-versatile`. Đặt biến này nếu Groq ngừng hỗ trợ model mặc định, không cần sửa code.
    - `HF_TOKEN` — access token (quyền **Read**) tạo tại [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens), dùng để gọi Inference API sinh ảnh.
-5. Deploy. Render sẽ build image từ `Dockerfile`, cài ffmpeg + dependencies, rồi chạy `python app.py` — app tự lắng nghe cổng Render cấp qua biến `$PORT`.
+7. Deploy. Cloud Build sẽ tự động build image từ `Dockerfile`, cài ffmpeg + dependencies, rồi chạy `python app.py` — app tự lắng nghe cổng Cloud Run cấp qua biến `$PORT`.
 
 ## Chạy local
 
 ```bash
 cd backend
 pip install -r requirements.txt
-export GEMINI_API_KEY=...   # chỉ cần cho chế độ chủ đề tự động
-export HF_TOKEN=...          # bắt buộc để sinh ảnh
+export GROQ_API_KEY=...   # chỉ cần cho chế độ chủ đề tự động
+export HF_TOKEN=...        # bắt buộc để sinh ảnh
 python app.py
 ```
 

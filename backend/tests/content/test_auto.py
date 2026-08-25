@@ -1,5 +1,6 @@
 import pytest
-from content.auto import generate_lesson, AutoGenerationError
+import content.auto as auto_module
+from content.auto import generate_lesson, groq_llm_call, AutoGenerationError
 
 
 def test_generate_lesson_parses_valid_json():
@@ -53,3 +54,74 @@ def test_generate_lesson_raises_after_max_retries():
 
     with pytest.raises(AutoGenerationError):
         generate_lesson("chủ đề", always_bad, max_retries=1)
+
+
+def test_groq_llm_call_raises_clear_error_without_api_key(monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    with pytest.raises(AutoGenerationError, match="GROQ_API_KEY"):
+        groq_llm_call("prompt")
+
+
+def test_groq_llm_call_uses_default_model_and_returns_content(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "groq_fake_key")
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    calls = []
+
+    class FakeMessage:
+        content = '{"items": []}'
+
+    class FakeChoice:
+        message = FakeMessage()
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return type("R", (), {"choices": [FakeChoice()]})()
+
+    class FakeChat:
+        completions = FakeCompletions()
+
+    class FakeGroqClient:
+        def __init__(self, api_key=None):
+            calls.append({"init_api_key": api_key})
+            self.chat = FakeChat()
+
+    monkeypatch.setattr(auto_module, "Groq", FakeGroqClient)
+
+    result = groq_llm_call("soạn bài")
+
+    assert result == '{"items": []}'
+    assert calls[0] == {"init_api_key": "groq_fake_key"}
+    assert calls[1]["model"] == auto_module.DEFAULT_GROQ_MODEL
+    assert calls[1]["messages"] == [{"role": "user", "content": "soạn bài"}]
+
+
+def test_groq_llm_call_honors_groq_model_env_override(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "groq_fake_key")
+    monkeypatch.setenv("GROQ_MODEL", "some-other-model")
+    calls = []
+
+    class FakeMessage:
+        content = "{}"
+
+    class FakeChoice:
+        message = FakeMessage()
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return type("R", (), {"choices": [FakeChoice()]})()
+
+    class FakeChat:
+        completions = FakeCompletions()
+
+    class FakeGroqClient:
+        def __init__(self, api_key=None):
+            self.chat = FakeChat()
+
+    monkeypatch.setattr(auto_module, "Groq", FakeGroqClient)
+
+    groq_llm_call("soạn bài")
+
+    assert calls[0]["model"] == "some-other-model"

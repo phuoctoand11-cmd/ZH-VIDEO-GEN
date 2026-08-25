@@ -2,6 +2,7 @@ import json
 import os
 from typing import Callable
 
+from groq import Groq
 from pydantic import BaseModel, ValidationError
 
 from content.schema import LessonItem
@@ -31,7 +32,7 @@ PROMPT_TEMPLATE = (
 def _strip_code_fence(raw_response: str) -> str:
     """Strip a surrounding markdown code fence from an LLM response, if present.
 
-    Gemini frequently wraps JSON in ```json ... ``` despite being told not to.
+    LLMs frequently wrap JSON in ```json ... ``` despite being told not to.
     """
     text = (raw_response or "").strip()
     if not text.startswith("```"):
@@ -64,18 +65,22 @@ def generate_lesson(
     )
 
 
-def gemini_llm_call(prompt: str) -> str:
-    import google.generativeai as genai
+# Groq's free tier needs no billing account, unlike Gemini's — which got
+# auto-upgraded to a paid prepay tier the moment any Cloud billing account
+# was linked anywhere under the same Google identity. GROQ_MODEL is
+# overridable via env var so a future model retirement (as happened with
+# gemini-2.0-flash) doesn't require a code change to fix.
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 
-    api_key = os.environ.get("GEMINI_API_KEY")
+
+def groq_llm_call(prompt: str) -> str:
+    api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        raise AutoGenerationError("GEMINI_API_KEY environment variable is not set")
-    genai.configure(api_key=api_key)
-    # gemini-2.0-flash was retired; confirmed live via the Gemini API's own
-    # 404 error, which names gemini-3.6-flash as its replacement.
-    model = genai.GenerativeModel("gemini-3.6-flash")
-    response = model.generate_content(
-        prompt,
-        generation_config={"response_mime_type": "application/json"},
+        raise AutoGenerationError("GROQ_API_KEY environment variable is not set")
+    client = Groq(api_key=api_key)
+    model = os.environ.get("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
     )
-    return response.text
+    return response.choices[0].message.content
