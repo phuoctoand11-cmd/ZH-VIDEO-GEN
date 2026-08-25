@@ -15,10 +15,21 @@ test("manual mode rejects empty csv text", () => {
   assert.match(result.error, /CSV/);
 });
 
-test("auto mode rejects empty topic", () => {
-  const result = validateForm({ mode: "Chủ đề tự động", csvText: "", topic: "  ", aspectRatios: ["9:16"] });
+test("vocab topic mode rejects empty topic", () => {
+  const result = validateForm({ mode: "Từ vựng theo chủ đề", csvText: "", topic: "  ", aspectRatios: ["9:16"] });
   assert.equal(result.valid, false);
   assert.match(result.error, /chủ đề/i);
+});
+
+test("dialogue topic mode rejects empty topic", () => {
+  const result = validateForm({ mode: "Hội thoại theo chủ đề", csvText: "", topic: "  ", aspectRatios: ["9:16"] });
+  assert.equal(result.valid, false);
+  assert.match(result.error, /chủ đề/i);
+});
+
+test("vocab topic mode accepts a filled topic", () => {
+  const result = validateForm({ mode: "Từ vựng theo chủ đề", csvText: "", topic: "đồ ăn", aspectRatios: ["9:16"] });
+  assert.equal(result.valid, true);
 });
 
 test("rejects empty aspect ratios", () => {
