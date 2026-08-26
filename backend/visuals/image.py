@@ -5,7 +5,16 @@ from pathlib import Path
 from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw
 
-MODEL_ID = "black-forest-labs/FLUX.1-schnell"
+MODEL_ID = "black-forest-labs/FLUX.1-dev"
+# dev (unlike the distilled schnell) is trained for a real step count and
+# actually uses guidance_scale — both knobs are what buys the extra prompt
+# adherence and detail over schnell's 4-step/no-guidance regime.
+DEFAULT_STEPS = 28
+DEFAULT_GUIDANCE_SCALE = 3.5
+# A retry after a failed/timed-out attempt still needs enough steps for dev
+# to converge to something coherent — schnell's old retry value of 2 would
+# produce noise on this model.
+RETRY_STEPS = 15
 
 # Small local pastel palette for the text-free placeholder image (see
 # make_placeholder_image below). Deliberately not imported from render.theme
@@ -34,9 +43,23 @@ def _get_client() -> InferenceClient:
     return _client
 
 
-def _generate(prompt: str, width: int = 768, height: int = 768, steps: int = 4) -> Image.Image:
+def _generate(
+    prompt: str,
+    width: int = 768,
+    height: int = 768,
+    steps: int = DEFAULT_STEPS,
+    guidance_scale: float = DEFAULT_GUIDANCE_SCALE,
+    negative_prompt: str | None = None,
+) -> Image.Image:
     client = _get_client()
-    return client.text_to_image(prompt, width=width, height=height, num_inference_steps=steps)
+    return client.text_to_image(
+        prompt,
+        width=width,
+        height=height,
+        num_inference_steps=steps,
+        guidance_scale=guidance_scale,
+        negative_prompt=negative_prompt,
+    )
 
 
 def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Image.Image:
@@ -66,7 +89,11 @@ def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Ima
 
 
 def generate_image(
-    prompt: str, cache_dir: str, max_retries: int = 1, size: tuple[int, int] = (768, 768)
+    prompt: str,
+    cache_dir: str,
+    max_retries: int = 1,
+    size: tuple[int, int] = (768, 768),
+    negative_prompt: str | None = None,
 ) -> str:
     cache_path = Path(cache_dir) / f"{hashlib.sha256(prompt.encode()).hexdigest()}.png"
     if cache_path.exists():
@@ -74,14 +101,16 @@ def generate_image(
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     width, height = size
-    steps = 4
+    steps = DEFAULT_STEPS
     for attempt in range(max_retries + 1):
         try:
-            image = _generate(prompt, width=width, height=height, steps=steps)
+            image = _generate(
+                prompt, width=width, height=height, steps=steps, negative_prompt=negative_prompt
+            )
             image.save(cache_path)
             return str(cache_path)
         except Exception:  # noqa: BLE001 - fall back to a placeholder below
-            width, height, steps = width // 2, height // 2, 2
+            width, height, steps = width // 2, height // 2, RETRY_STEPS
 
     placeholder = make_placeholder_image(prompt[:40], size=size)
     placeholder.save(cache_path)

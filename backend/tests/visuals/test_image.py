@@ -7,7 +7,7 @@ import visuals.image as image_module
 def test_generate_image_uses_cache(tmp_path, monkeypatch):
     calls = {"count": 0}
 
-    def fake_generate(prompt, width=768, height=768, steps=4):
+    def fake_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
         calls["count"] += 1
         return Image.new("RGB", (width, height), color=(1, 2, 3))
 
@@ -18,8 +18,39 @@ def test_generate_image_uses_cache(tmp_path, monkeypatch):
     assert calls["count"] == 1
 
 
+def test_generate_image_passes_steps_and_negative_prompt_through(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
+        captured["steps"] = steps
+        captured["negative_prompt"] = negative_prompt
+        return Image.new("RGB", (width, height), color=(1, 2, 3))
+
+    monkeypatch.setattr(image_module, "_generate", fake_generate)
+    image_module.generate_image("a cat", str(tmp_path), negative_prompt="blurry, text")
+
+    assert captured["steps"] == image_module.DEFAULT_STEPS
+    assert captured["negative_prompt"] == "blurry, text"
+
+
+def test_generate_image_retries_with_reduced_but_nonzero_steps(tmp_path, monkeypatch):
+    attempts = []
+
+    def flaky_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
+        attempts.append(steps)
+        if len(attempts) == 1:
+            raise RuntimeError("timed out")
+        return Image.new("RGB", (width, height), color=(1, 2, 3))
+
+    monkeypatch.setattr(image_module, "_generate", flaky_generate)
+    image_module.generate_image("a cat", str(tmp_path), max_retries=1)
+
+    assert attempts == [image_module.DEFAULT_STEPS, image_module.RETRY_STEPS]
+    assert image_module.RETRY_STEPS > 2
+
+
 def test_generate_image_falls_back_to_placeholder(tmp_path, monkeypatch):
-    def always_fail(prompt, width=768, height=768, steps=4):
+    def always_fail(prompt, width=768, height=768, steps=None, negative_prompt=None):
         raise RuntimeError("out of memory")
 
     monkeypatch.setattr(image_module, "_generate", always_fail)
@@ -73,7 +104,7 @@ def test_get_client_builds_inference_client_with_model_and_token(monkeypatch):
 
     assert calls == [
         {
-            "model": "black-forest-labs/FLUX.1-schnell",
+            "model": "black-forest-labs/FLUX.1-dev",
             "token": "hf_fake_token",
             "timeout": image_module.REQUEST_TIMEOUT_SECONDS,
         }
@@ -83,6 +114,38 @@ def test_get_client_builds_inference_client_with_model_and_token(monkeypatch):
     # A second call must reuse the cached client, not construct a new one.
     image_module._get_client()
     assert len(calls) == 1
+
+
+def test_generate_calls_client_with_guidance_scale_and_negative_prompt(monkeypatch):
+    monkeypatch.setattr(image_module, "_client", None)
+    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
+
+    calls = []
+
+    class FakeInferenceClient:
+        def __init__(self, model=None, token=None, timeout=None):
+            pass
+
+        def text_to_image(self, prompt, **kwargs):
+            calls.append((prompt, kwargs))
+            return Image.new("RGB", (kwargs["width"], kwargs["height"]))
+
+    monkeypatch.setattr(image_module, "InferenceClient", FakeInferenceClient)
+
+    image_module._generate("a cat", width=100, height=100, negative_prompt="blurry")
+
+    assert calls == [
+        (
+            "a cat",
+            {
+                "width": 100,
+                "height": 100,
+                "num_inference_steps": image_module.DEFAULT_STEPS,
+                "guidance_scale": image_module.DEFAULT_GUIDANCE_SCALE,
+                "negative_prompt": "blurry",
+            },
+        )
+    ]
 
 
 def test_get_client_raises_clear_error_without_hf_token(monkeypatch):

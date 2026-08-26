@@ -10,6 +10,17 @@ _AVATAR_VARIANTS = [
 ]
 
 
+# Passed as negative_prompt alongside build_scene_prompt's output — FLUX.1-dev
+# (unlike schnell) actually honors negative_prompt, so this is a second lever
+# on top of the model switch for suppressing the same failure modes the
+# "no text" clause in build_scene_prompt already targets, plus general
+# quality/anatomy artifacts.
+SCENE_NEGATIVE_PROMPT = (
+    "blurry, low quality, distorted, deformed, extra limbs, extra fingers, "
+    "text, letters, words, watermark, logo, signature, caption, jpeg artifacts"
+)
+
+
 def build_scene_prompt(icon_prompt: str) -> str:
     # "children's-book illustration" was tried first and reliably went wrong
     # two ways at once: it biased FLUX toward generic kid-in-nature scenes

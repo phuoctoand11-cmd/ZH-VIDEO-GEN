@@ -14,7 +14,7 @@ from render.assemble import ASPECT_SIZES, assemble_video, build_static_scene_cli
 from render.dialogue_card import draw_dialogue_turn
 from render.vocab_card import draw_vocab_card
 from visuals.image import generate_image
-from visuals.prompt_builder import build_avatar_prompt, build_scene_prompt
+from visuals.prompt_builder import SCENE_NEGATIVE_PROMPT, build_avatar_prompt, build_scene_prompt
 
 SCENE_IMAGE_SIZE = (768, 576)
 
@@ -60,6 +60,7 @@ def run_vocab_card_pipeline(
             build_scene_prompt(item.icon_prompt),
             cache_dir=f"{work_dir}/scenes",
             size=SCENE_IMAGE_SIZE,
+            negative_prompt=SCENE_NEGATIVE_PROMPT,
         )
         for item in items
     ]
