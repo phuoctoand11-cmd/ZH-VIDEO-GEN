@@ -4,55 +4,179 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tạo video dạy tiếng Trung</title>
+  <meta name="description" content="Nhập một chủ đề, AI soạn từ vựng hoặc hội thoại tiếng Trung, đọc giọng thật và xuất video sẵn dùng.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>Tạo video dạy tiếng Trung song ngữ Việt-Trung</h1>
-
-  <form id="generate-form">
-    <fieldset>
-      <legend>Chế độ nhập</legend>
-      <label><input type="radio" name="mode" value="Nhập danh sách" checked> Nhập danh sách</label>
-      <label><input type="radio" name="mode" value="Từ vựng theo chủ đề"> Từ vựng theo chủ đề</label>
-      <label><input type="radio" name="mode" value="Hội thoại theo chủ đề"> Hội thoại theo chủ đề</label>
-    </fieldset>
-
-    <label for="csv-text">Danh sách CSV (hanzi,pinyin,meaning_vi)</label>
-    <textarea id="csv-text" rows="8" placeholder="hanzi,pinyin,meaning_vi&#10;吃,chī,ăn"></textarea>
-
-    <label for="topic">Chủ đề / bộ thủ</label>
-    <input type="text" id="topic" placeholder="vd: đồ ăn, hoặc 冫 (bộ băng)">
-
-    <button type="button" id="preview-btn" style="display:none">Xem trước</button>
-
-    <label for="template-name">Template trình tự audio</label>
-    <select id="template-name">
-      <option value="zh-zh-vi">zh-zh-vi</option>
-      <option value="zh-vi-zh">zh-vi-zh</option>
-    </select>
-
-    <fieldset>
-      <legend>Tỉ lệ khung hình</legend>
-      <label><input type="checkbox" name="aspect_ratio" value="9:16" checked> 9:16</label>
-      <label><input type="checkbox" name="aspect_ratio" value="16:9"> 16:9</label>
-    </fieldset>
-
-    <button type="submit" id="submit-btn">Tạo video</button>
-  </form>
-
-  <p id="status"></p>
-
-  <div id="results">
-    <div id="result-9-16" style="display:none">
-      <video id="video-9-16" controls></video>
-      <a id="download-9-16" download>Tải video 9:16</a>
+  <header class="site-header">
+    <div class="wrap site-header__row">
+      <a class="wordmark" href="#top">
+        <span class="wordmark__mark" aria-hidden="true">字</span>
+        <span class="wordmark__text">Video Từ Vựng Trung</span>
+      </a>
+      <p class="site-header__tag">Việt–Trung song ngữ</p>
     </div>
-    <div id="result-16-9" style="display:none">
-      <video id="video-16-9" controls></video>
-      <a id="download-16-9" download>Tải video 16:9</a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero__row">
+        <div class="hero__copy">
+          <p class="eyebrow">Một chủ đề → một video học từ vựng</p>
+          <h1>Dạy tiếng Trung bằng video, không cần dựng tay</h1>
+          <p class="hero__lede">
+            Nhập chủ đề hoặc tự soạn danh sách — AI viết từ vựng, tạo hình minh hoạ,
+            đọc giọng bản xứ và ghép thành video sẵn dùng, chỉ trong vài phút.
+          </p>
+          <a class="hero__cta" href="#generate">Bắt đầu tạo video ↓</a>
+        </div>
+
+        <div class="hero__mock" aria-hidden="true">
+          <div class="mock-card">
+            <p class="mock-card__title">TỪ VỰNG TIẾNG TRUNG</p>
+            <p class="mock-card__subtitle">Chủ đề: Đi làm</p>
+            <div class="mock-row">
+              <span class="mock-row__badge">1</span>
+              <span class="mock-row__thumb mock-row__thumb--a"></span>
+              <span class="mock-row__text">
+                <span class="mock-row__hanzi">上班</span>
+                <span class="mock-row__pinyin">shàngbān</span>
+                <span class="mock-row__meaning">đi làm</span>
+              </span>
+            </div>
+            <div class="mock-row">
+              <span class="mock-row__badge">2</span>
+              <span class="mock-row__thumb mock-row__thumb--b"></span>
+              <span class="mock-row__text">
+                <span class="mock-row__hanzi">公司</span>
+                <span class="mock-row__pinyin">gōngsī</span>
+                <span class="mock-row__meaning">công ty</span>
+              </span>
+            </div>
+            <div class="mock-row mock-row--fade">
+              <span class="mock-row__badge">3</span>
+              <span class="mock-row__thumb mock-row__thumb--c"></span>
+              <span class="mock-row__text">
+                <span class="mock-row__hanzi">开会</span>
+                <span class="mock-row__pinyin">kāihuì</span>
+                <span class="mock-row__meaning">họp</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="generate" class="builder">
+      <div class="wrap">
+        <form id="generate-form" class="builder__form" novalidate>
+
+          <fieldset class="step">
+            <legend class="step__legend"><span class="step__num">1</span> Chọn chế độ nhập</legend>
+            <div class="mode-picker">
+              <label class="mode-card">
+                <input type="radio" name="mode" value="Nhập danh sách" checked>
+                <span class="mode-card__title">Nhập danh sách</span>
+                <span class="mode-card__desc">Tự gõ từng dòng hanzi, pinyin, nghĩa.</span>
+              </label>
+              <label class="mode-card">
+                <input type="radio" name="mode" value="Từ vựng theo chủ đề">
+                <span class="mode-card__title">Từ vựng theo chủ đề</span>
+                <span class="mode-card__desc">AI soạn 5 từ liên quan tới chủ đề bạn nhập.</span>
+              </label>
+              <label class="mode-card">
+                <input type="radio" name="mode" value="Hội thoại theo chủ đề">
+                <span class="mode-card__title">Hội thoại theo chủ đề</span>
+                <span class="mode-card__desc">AI soạn đoạn hội thoại 2 nhân vật.</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="step">
+            <p class="step__legend"><span class="step__num">2</span> Nội dung</p>
+
+            <div class="field">
+              <div class="field__head">
+                <label for="csv-text">Danh sách CSV</label>
+                <span class="field__chip">Dùng cho “Nhập danh sách”</span>
+              </div>
+              <textarea id="csv-text" rows="7" placeholder="hanzi,pinyin,meaning_vi&#10;吃,chī,ăn&#10;喝,hē,uống"></textarea>
+              <p class="field__hint">Mỗi dòng một mục, theo thứ tự hanzi,pinyin,meaning_vi — không cần dòng tiêu đề.</p>
+            </div>
+
+            <div class="field">
+              <div class="field__head">
+                <label for="topic">Chủ đề / bộ thủ</label>
+                <span class="field__chip">Dùng cho 2 chế độ theo chủ đề</span>
+              </div>
+              <input type="text" id="topic" placeholder="vd: đồ ăn, hoặc 冫 (bộ băng)">
+              <button type="button" id="preview-btn" class="btn btn--ghost" style="display:none">Xem trước nội dung</button>
+            </div>
+          </div>
+
+          <fieldset class="step">
+            <legend class="step__legend"><span class="step__num">3</span> Tuỳ chọn video</legend>
+
+            <div class="field">
+              <label for="template-name">Trình tự giọng đọc</label>
+              <select id="template-name">
+                <option value="zh-zh-vi">Trung → Trung → Việt</option>
+                <option value="zh-vi-zh">Trung → Việt → Trung</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <span class="field__head-label">Tỉ lệ khung hình</span>
+              <div class="ratio-picker">
+                <label class="ratio-chip">
+                  <input type="checkbox" name="aspect_ratio" value="9:16" checked>
+                  <span>9:16 <small>Reels/TikTok</small></span>
+                </label>
+                <label class="ratio-chip">
+                  <input type="checkbox" name="aspect_ratio" value="16:9">
+                  <span>16:9 <small>YouTube</small></span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="builder__submit">
+            <button type="submit" id="submit-btn" class="btn btn--primary">Tạo video</button>
+            <p id="status" class="status" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="results-section">
+      <div class="wrap">
+        <div id="results">
+          <div class="result-grid">
+            <div id="result-9-16" class="result-card" style="display:none">
+              <p class="result-card__label">Video 9:16</p>
+              <video id="video-9-16" controls></video>
+              <a id="download-9-16" class="btn btn--ghost" download>Tải video 9:16</a>
+            </div>
+            <div id="result-16-9" class="result-card" style="display:none">
+              <p class="result-card__label">Video 16:9</p>
+              <video id="video-16-9" controls></video>
+              <a id="download-16-9" class="btn btn--ghost" download>Tải video 16:9</a>
+            </div>
+          </div>
+          <pre id="log"></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Tạo video học từ vựng tiếng Trung song ngữ Việt–Trung.</p>
     </div>
-    <pre id="log"></pre>
-  </div>
+  </footer>
 
   <script type="module" src="js/app.js"></script>
 </body>
