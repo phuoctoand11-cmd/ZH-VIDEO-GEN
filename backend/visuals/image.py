@@ -1,22 +1,25 @@
+import base64
 import hashlib
+import io
 import logging
 import os
 from pathlib import Path
 
-from huggingface_hub import InferenceClient
+import requests
 from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = "black-forest-labs/FLUX.1-dev"
-# dev (unlike the distilled schnell) is trained for a real step count and
-# actually uses guidance_scale — both knobs are what buys the extra prompt
-# adherence and detail over schnell's 4-step/no-guidance regime.
-DEFAULT_STEPS = 28
-DEFAULT_GUIDANCE_SCALE = 3.5
-# A retry after a failed/timed-out attempt still needs enough steps for dev
-# to converge to something coherent — schnell's old retry value of 2 would
-# produce noise on this model.
+MODEL_ID = "@cf/leonardo/phoenix-1.0"
+API_BASE = "https://api.cloudflare.com/client/v4/accounts"
+# Phoenix's guidance range is 2-10 (Cloudflare's own default is 2, the low
+# end); we bias toward the high end because scene illustrations must match
+# the vocabulary item's meaning, and stronger prompt adherence matters more
+# here than generation variety.
+DEFAULT_GUIDANCE = 8
+DEFAULT_STEPS = 30
+# A retry after a failed attempt still needs enough steps to converge to
+# something coherent, just cheaper than the first attempt.
 RETRY_STEPS = 15
 
 # Small local pastel palette for the text-free placeholder image (see
@@ -28,26 +31,15 @@ _PLACEHOLDER_PALETTE = [
     (183, 235, 183),  # pastel green
     (255, 218, 170),  # pastel orange
 ]
-# huggingface_hub's InferenceClient has no read timeout by default, so a
-# stalled/cold shared endpoint would hang the request indefinitely instead of
-# falling through to the retry/placeholder path below. 60s was tuned for
-# schnell's 4-step generation; FLUX.1-dev's 28-step generation routinely
-# exceeded it in production (verified: 4 of 5 scene images fell back to the
-# placeholder circle on a live run), so this needs real headroom for dev's
-# per-step cost plus shared-endpoint queueing/cold-start variance.
-REQUEST_TIMEOUT_SECONDS = 180
-
-_client = None
+REQUEST_TIMEOUT_SECONDS = 60
 
 
-def _get_client() -> InferenceClient:
-    global _client
-    if _client is None:
-        token = os.environ.get("HF_TOKEN")
-        if not token:
-            raise RuntimeError("HF_TOKEN environment variable is not set")
-        _client = InferenceClient(model=MODEL_ID, token=token, timeout=REQUEST_TIMEOUT_SECONDS)
-    return _client
+def _get_credentials() -> tuple[str, str]:
+    account_id = os.environ.get("CF_ACCOUNT_ID")
+    token = os.environ.get("CF_API_TOKEN")
+    if not account_id or not token:
+        raise RuntimeError("CF_ACCOUNT_ID and CF_API_TOKEN environment variables must be set")
+    return account_id, token
 
 
 def _generate(
@@ -55,18 +47,42 @@ def _generate(
     width: int = 768,
     height: int = 768,
     steps: int = DEFAULT_STEPS,
-    guidance_scale: float = DEFAULT_GUIDANCE_SCALE,
+    guidance: float = DEFAULT_GUIDANCE,
     negative_prompt: str | None = None,
 ) -> Image.Image:
-    client = _get_client()
-    return client.text_to_image(
-        prompt,
-        width=width,
-        height=height,
-        num_inference_steps=steps,
-        guidance_scale=guidance_scale,
-        negative_prompt=negative_prompt,
+    account_id, token = _get_credentials()
+    url = f"{API_BASE}/{account_id}/ai/run/{MODEL_ID}"
+    payload = {
+        "prompt": prompt,
+        "width": width,
+        "height": height,
+        "num_steps": steps,
+        "guidance": guidance,
+    }
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
+
+    response = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {token}"},
+        json=payload,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
+    response.raise_for_status()
+
+    # Cloudflare's documented response shape differs per model (some return
+    # raw image bytes, some wrap a base64 string in a JSON envelope) and this
+    # model's docs don't specify which — handle both rather than guess wrong.
+    content_type = response.headers.get("content-type", "")
+    if "application/json" in content_type:
+        data = response.json()
+        if not data.get("success", True):
+            raise RuntimeError(f"Cloudflare Workers AI error: {data.get('errors')}")
+        image_bytes = base64.b64decode(data["result"]["image"])
+    else:
+        image_bytes = response.content
+
+    return Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
 
 def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Image.Image:

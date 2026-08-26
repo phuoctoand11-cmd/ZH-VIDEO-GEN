@@ -1,3 +1,5 @@
+import base64
+import io
 from pathlib import Path
 
 from PIL import Image
@@ -88,72 +90,102 @@ def test_make_placeholder_image_draws_no_text_and_varies_color_by_prompt():
     assert repeat == center_a
 
 
-def test_get_client_builds_inference_client_with_model_and_token(monkeypatch):
-    monkeypatch.setattr(image_module, "_client", None)
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
-
-    calls = []
-
-    class FakeInferenceClient:
-        def __init__(self, model=None, token=None, timeout=None):
-            calls.append({"model": model, "token": token, "timeout": timeout})
-
-    monkeypatch.setattr(image_module, "InferenceClient", FakeInferenceClient)
-
-    client = image_module._get_client()
-
-    assert calls == [
-        {
-            "model": "black-forest-labs/FLUX.1-dev",
-            "token": "hf_fake_token",
-            "timeout": image_module.REQUEST_TIMEOUT_SECONDS,
-        }
-    ]
-    assert isinstance(client, FakeInferenceClient)
-
-    # A second call must reuse the cached client, not construct a new one.
-    image_module._get_client()
-    assert len(calls) == 1
+def _png_bytes(size=(4, 4), color=(10, 20, 30)):
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buf, format="PNG")
+    return buf.getvalue()
 
 
-def test_generate_calls_client_with_guidance_scale_and_negative_prompt(monkeypatch):
-    monkeypatch.setattr(image_module, "_client", None)
-    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
+class _FakeResponse:
+    def __init__(self, headers, json_data=None, content=b""):
+        self.headers = headers
+        self._json_data = json_data
+        self.content = content
 
-    calls = []
+    def raise_for_status(self):
+        pass
 
-    class FakeInferenceClient:
-        def __init__(self, model=None, token=None, timeout=None):
-            pass
-
-        def text_to_image(self, prompt, **kwargs):
-            calls.append((prompt, kwargs))
-            return Image.new("RGB", (kwargs["width"], kwargs["height"]))
-
-    monkeypatch.setattr(image_module, "InferenceClient", FakeInferenceClient)
-
-    image_module._generate("a cat", width=100, height=100, negative_prompt="blurry")
-
-    assert calls == [
-        (
-            "a cat",
-            {
-                "width": 100,
-                "height": 100,
-                "num_inference_steps": image_module.DEFAULT_STEPS,
-                "guidance_scale": image_module.DEFAULT_GUIDANCE_SCALE,
-                "negative_prompt": "blurry",
-            },
-        )
-    ]
+    def json(self):
+        return self._json_data
 
 
-def test_get_client_raises_clear_error_without_hf_token(monkeypatch):
-    monkeypatch.setattr(image_module, "_client", None)
-    monkeypatch.delenv("HF_TOKEN", raising=False)
+def test_get_credentials_reads_account_id_and_token_from_env(monkeypatch):
+    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
+    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
+
+    assert image_module._get_credentials() == ("acct123", "cf_fake_token")
+
+
+def test_get_credentials_raises_clear_error_when_missing(monkeypatch):
+    monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("CF_API_TOKEN", raising=False)
 
     try:
-        image_module._get_client()
+        image_module._get_credentials()
         assert False, "expected RuntimeError"
     except RuntimeError as exc:
-        assert "HF_TOKEN" in str(exc)
+        assert "CF_ACCOUNT_ID" in str(exc)
+        assert "CF_API_TOKEN" in str(exc)
+
+
+def test_generate_posts_expected_payload_and_parses_json_envelope(monkeypatch):
+    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
+    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
+
+    calls = []
+    image_b64 = base64.b64encode(_png_bytes()).decode()
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        return _FakeResponse(
+            headers={"content-type": "application/json"},
+            json_data={"success": True, "result": {"image": image_b64}},
+        )
+
+    monkeypatch.setattr(image_module.requests, "post", fake_post)
+
+    image = image_module._generate("a cat", width=100, height=100, negative_prompt="blurry")
+
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["url"] == f"{image_module.API_BASE}/acct123/ai/run/{image_module.MODEL_ID}"
+    assert call["headers"] == {"Authorization": "Bearer cf_fake_token"}
+    assert call["json"] == {
+        "prompt": "a cat",
+        "width": 100,
+        "height": 100,
+        "num_steps": image_module.DEFAULT_STEPS,
+        "guidance": image_module.DEFAULT_GUIDANCE,
+        "negative_prompt": "blurry",
+    }
+    assert image.size == (4, 4)
+
+
+def test_generate_handles_raw_binary_response(monkeypatch):
+    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
+    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        return _FakeResponse(headers={"content-type": "image/png"}, content=_png_bytes())
+
+    monkeypatch.setattr(image_module.requests, "post", fake_post)
+
+    image = image_module._generate("a cat", width=100, height=100)
+    assert image.size == (4, 4)
+
+
+def test_generate_omits_negative_prompt_key_when_not_given(monkeypatch):
+    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
+    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
+
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append(json)
+        return _FakeResponse(headers={"content-type": "image/png"}, content=_png_bytes())
+
+    monkeypatch.setattr(image_module.requests, "post", fake_post)
+
+    image_module._generate("a cat", width=100, height=100)
+
+    assert "negative_prompt" not in calls[0]
