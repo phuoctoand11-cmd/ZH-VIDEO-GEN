@@ -37,6 +37,7 @@ def run_vocab_card_pipeline(
     template: AudioTemplate,
     aspect_ratios: list[str],
     work_dir: str,
+    topic_label: str | None = None,
 ) -> PipelineResult:
     filled_lines = fill_pinyin_batch(
         [LessonItem(hanzi=i.hanzi, pinyin=i.pinyin, meaning_vi=i.meaning_vi) for i in result.items]
@@ -79,7 +80,7 @@ def run_vocab_card_pipeline(
     for ratio in aspect_ratios:
         size = ASPECT_SIZES[ratio]
         try:
-            card = draw_vocab_card(result, image_paths, size)
+            card = draw_vocab_card(result, image_paths, size, topic_label=topic_label)
             card_path = f"{work_dir}/vocab_card_{ratio.replace(':', 'x')}.png"
             card.save(card_path)
             clip = build_static_scene_clip(card_path, all_audio_paths, ratio)

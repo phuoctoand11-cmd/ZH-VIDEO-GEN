@@ -75,11 +75,14 @@ def generate_preview(mode, topic):
         return gr.update(), f"Lỗi: {exc}"
 
 
-def generate_video(mode, csv_text, template_name, aspect_ratios):
+def generate_video(mode, csv_text, template_name, aspect_ratios, topic=""):
     """Entry point for both the Gradio UI and external API callers.
 
-    Always returns a 3-tuple (video_9_16, video_16_9, log_text); any failure is
-    reported in the log text instead of propagating a traceback to the caller.
+    `topic` is display-only here — it labels the vocab card's subtitle
+    ("Chủ đề: {topic}") and is never sent to the LLM (that already happened,
+    if at all, in generate_preview). Always returns a 3-tuple (video_9_16,
+    video_16_9, log_text); any failure is reported in the log text instead
+    of propagating a traceback to the caller.
     """
     try:
         templates = _load_templates()
@@ -138,7 +141,10 @@ def generate_video(mode, csv_text, template_name, aspect_ratios):
                     for i in items
                 ]
             )
-            result = run_vocab_card_pipeline(vocab_result, template, aspect_ratios, work_dir)
+            topic_label = topic.strip() if (topic or "").strip() else None
+            result = run_vocab_card_pipeline(
+                vocab_result, template, aspect_ratios, work_dir, topic_label=topic_label
+            )
             log_lines = list(warnings)
 
         log_lines += [f"Lỗi mục '{e.item.hanzi}': {e.error}" for e in result.item_errors]
@@ -197,7 +203,7 @@ def build_app() -> gr.Blocks:
 
         submit.click(
             generate_video,
-            inputs=[mode, csv_text, template_name, aspect_ratios],
+            inputs=[mode, csv_text, template_name, aspect_ratios, topic],
             outputs=[video_9_16, video_16_9, log],
             api_name="generate_video",
         )

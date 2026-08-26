@@ -21,7 +21,7 @@ test("callGenerateVideo builds the payload, calls the named endpoint, and parses
   const fakeClient = {
     submit: (endpoint, payload, ...rest) => {
       assert.equal(endpoint, "/generate_video");
-      assert.deepEqual(payload, ["Nhập danh sách", "吃,chī,ăn", "zh-zh-vi", ["9:16"]]);
+      assert.deepEqual(payload, ["Nhập danh sách", "吃,chī,ăn", "zh-zh-vi", ["9:16"], ""]);
       // A default-options @gradio/client only forwards "data" events unless
       // all_events (the 5th positional arg) is true — this must stay true or
       // every status/error-stage event is silently dropped before this test

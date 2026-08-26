@@ -69,7 +69,7 @@ def test_generate_video_manual_mode_routes_to_vocab_card_pipeline(monkeypatch):
 
     calls = {"count": 0}
 
-    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir):
+    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir, topic_label=None):
         calls["count"] += 1
         assert vocab_result.items[0].hanzi == "吃"
         return PipelineResult(video_paths={"9:16": "out.mp4"})
@@ -110,7 +110,7 @@ def test_generate_video_manual_mode_allows_exactly_max_items(monkeypatch):
 
     calls = {"count": 0}
 
-    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir):
+    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir, topic_label=None):
         calls["count"] += 1
         assert len(vocab_result.items) == MAX_VOCAB_ITEMS
         return PipelineResult(video_paths={"9:16": "out.mp4"})
@@ -146,7 +146,7 @@ def test_generate_video_vocab_topic_mode_routes_to_vocab_card_pipeline_via_csv_t
 
     calls = {"count": 0}
 
-    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir):
+    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir, topic_label=None):
         calls["count"] += 1
         assert vocab_result.items[0].hanzi == "吃"
         return PipelineResult(video_paths={"9:16": "out.mp4"})
@@ -162,6 +162,43 @@ def test_generate_video_vocab_topic_mode_routes_to_vocab_card_pipeline_via_csv_t
     assert calls["count"] == 1
     assert video_9_16 == "out.mp4"
     assert log == "Hoàn tất, không có lỗi."
+
+
+def test_generate_video_passes_topic_through_as_display_label_only(monkeypatch):
+    # topic is display-only here (labels the card's "Chủ đề: …" subtitle) —
+    # confirm it reaches run_vocab_card_pipeline's topic_label kwarg, and
+    # confirm generate_video still never calls the LLM with it.
+    from pipeline import PipelineResult
+
+    seen = {}
+
+    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir, topic_label=None):
+        seen["topic_label"] = topic_label
+        return PipelineResult(video_paths={"9:16": "out.mp4"})
+
+    def unexpected_llm(topic, llm_call):
+        raise AssertionError("generate_video must not call the LLM directly")
+
+    monkeypatch.setattr(app_module, "run_vocab_card_pipeline", fake_pipeline)
+    monkeypatch.setattr(app_module, "generate_vocab_topic", unexpected_llm)
+    app_module.generate_video(
+        "Từ vựng theo chủ đề", _valid_csv(), "zh-zh-vi", ["9:16"], topic="đồ ăn"
+    )
+    assert seen["topic_label"] == "đồ ăn"
+
+
+def test_generate_video_defaults_topic_label_to_none_when_blank(monkeypatch):
+    from pipeline import PipelineResult
+
+    seen = {}
+
+    def fake_pipeline(vocab_result, template, aspect_ratios, work_dir, topic_label=None):
+        seen["topic_label"] = topic_label
+        return PipelineResult(video_paths={"9:16": "out.mp4"})
+
+    monkeypatch.setattr(app_module, "run_vocab_card_pipeline", fake_pipeline)
+    app_module.generate_video("Nhập danh sách", _valid_csv(), "zh-zh-vi", ["9:16"])
+    assert seen["topic_label"] is None
 
 
 def test_generate_video_vocab_topic_mode_rejects_empty_csv_text(monkeypatch):

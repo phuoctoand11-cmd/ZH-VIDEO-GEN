@@ -11,14 +11,22 @@ _AVATAR_VARIANTS = [
 
 
 def build_scene_prompt(icon_prompt: str) -> str:
+    # "children's-book illustration" was tried first and reliably went wrong
+    # two ways at once: it biased FLUX toward generic kid-in-nature scenes
+    # that ignored icon_prompt, and it added storybook-style decorative
+    # captions (broken pseudo-text) onto the image — a real regression
+    # observed on production, not a guess. This wording instead reuses the
+    # flat-vector/chibi/kawaii framing from the mascot prompts elsewhere in
+    # this file, which never triggered embedded text across this whole
+    # project, and puts icon_prompt first for the strongest prompt weight.
     return (
-        f"A colorful children's-book illustration that clearly and literally depicts: "
-        f"{icon_prompt}. The scene must unambiguously show this exact action, object, "
-        f"or person so a viewer instantly recognizes what it is — accuracy to the "
-        f"description matters more than decoration. Cute semi-realistic cartoon "
-        f"characters, soft shading, warm friendly color palette, simple uncluttered "
-        f"background, landscape orientation, no text, no letters, no numbers, no "
-        f"watermark."
+        f"{icon_prompt}. Flat-vector digital illustration, accurately and literally "
+        f"depicting this exact scene — the action, objects, and setting must be "
+        f"unambiguously recognizable, that matters more than decoration. Cute rounded "
+        f"chibi-style character design, soft shading, bright warm colors, thick clean "
+        f"outlines, simple uncluttered background, kawaii illustration style, landscape "
+        f"orientation, no text, no letters, no words, no numbers, no captions, no "
+        f"watermark, no logos."
     )
 
 
