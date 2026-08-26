@@ -1,9 +1,12 @@
 import hashlib
+import logging
 import os
 from pathlib import Path
 
 from huggingface_hub import InferenceClient
 from PIL import Image, ImageDraw
+
+logger = logging.getLogger(__name__)
 
 MODEL_ID = "black-forest-labs/FLUX.1-dev"
 # dev (unlike the distilled schnell) is trained for a real step count and
@@ -114,6 +117,10 @@ def generate_image(
             image.save(cache_path)
             return str(cache_path)
         except Exception:  # noqa: BLE001 - fall back to a placeholder below
+            # Previously silent, which made every real failure indistinguishable
+            # from a normal fallback in production — this is the only signal
+            # that reaches Cloud Run logs when generation fails.
+            logger.exception("generate_image attempt %d failed for prompt: %s", attempt, prompt)
             width, height, steps = width // 2, height // 2, RETRY_STEPS
 
     placeholder = make_placeholder_image(prompt[:40], size=size)
