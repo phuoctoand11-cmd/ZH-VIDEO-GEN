@@ -13,6 +13,8 @@
 
 ## Kiến trúc
 
+> Từ 2026-08-25, hệ thống ảnh nền chuyển sang card thiết kế sẵn (chữ do code vẽ, AI chỉ sinh mascot/avatar) — xem chi tiết tại `docs/superpowers/specs/2026-08-25-card-templates-design.md`.
+
 Hai phần triển khai riêng, giao tiếp qua Gradio API:
 
 ```
@@ -48,6 +50,8 @@ zh-video-gen/
 Mỗi module backend chỉ làm một việc, giao tiếp qua `LessonItem`/đường dẫn file — có thể test độc lập, và có thể thay TTS/model ảnh sau này mà không đụng phần khác. Logic xử lý (content/audio/visuals/render) không đổi so với thiết kế ban đầu — chỉ đổi nơi chạy và cách frontend/backend giao tiếp.
 
 ### Công nghệ chọn (đều miễn phí)
+
+> Từ 2026-08-25, hệ thống ảnh nền chuyển sang card thiết kế sẵn (chữ do code vẽ, AI chỉ sinh mascot/avatar) — xem chi tiết tại `docs/superpowers/specs/2026-08-25-card-templates-design.md`.
 
 - **Pinyin**: `pypinyin` — offline, không cần API.
 - **TTS**: `edge-tts` — miễn phí, không cần key, có giọng Trung (`zh-CN-XiaoxiaoNeural`...) và giọng Việt (`vi-VN-HoaiMyNeural`...) trong cùng thư viện.

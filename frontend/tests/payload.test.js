@@ -14,6 +14,6 @@ test("builds payload in backend's expected parameter order", () => {
 });
 
 test("defaults missing csvText/topic to empty string", () => {
-  const payload = buildApiPayload({ mode: "Chủ đề tự động", templateName: "zh-vi-zh", aspectRatios: ["9:16"] });
-  assert.deepEqual(payload, ["Chủ đề tự động", "", "", "zh-vi-zh", ["9:16"]]);
+  const payload = buildApiPayload({ mode: "Từ vựng theo chủ đề", templateName: "zh-vi-zh", aspectRatios: ["9:16"] });
+  assert.deepEqual(payload, ["Từ vựng theo chủ đề", "", "", "zh-vi-zh", ["9:16"]]);
 });

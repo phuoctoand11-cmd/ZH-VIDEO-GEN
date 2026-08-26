@@ -1,12 +1,22 @@
 from dataclasses import dataclass, field
 
 from audio.templates import AudioTemplate
-from audio.tts import synthesize
+from audio.tts import TTSError, get_audio_duration, make_silence, synthesize
 from content.pinyin import fill_pinyin_batch
-from content.schema import LessonItem
-from render.assemble import assemble_video, build_scene_clip
+from content.schema import (
+    DialogueResult,
+    DialogueTurn,
+    LessonItem,
+    VocabCardItem,
+    VocabTopicResult,
+)
+from moviepy import AudioFileClip, concatenate_audioclips
+from render.assemble import ASPECT_SIZES, assemble_video, build_static_scene_clip
+from render.dialogue_card import draw_dialogue_turn
+from render.highlight import DEFAULT_ZOOM_HEIGHT_FRAC, make_highlight_clip
+from render.vocab_card import draw_vocab_card, row_regions
 from visuals.image import generate_image
-from visuals.prompt_builder import build_image_prompt
+from visuals.prompt_builder import build_avatar_prompt, build_mascot_prompt
 
 
 @dataclass
@@ -22,33 +32,115 @@ class PipelineResult:
     assembly_errors: dict[str, str] = field(default_factory=dict)
 
 
-def run_pipeline(
-    items: list[LessonItem],
+def run_vocab_card_pipeline(
+    result: VocabTopicResult,
     template: AudioTemplate,
     aspect_ratios: list[str],
     work_dir: str,
 ) -> PipelineResult:
-    items = fill_pinyin_batch(items)
+    filled_lines = fill_pinyin_batch(
+        [LessonItem(hanzi=i.hanzi, pinyin=i.pinyin, meaning_vi=i.meaning_vi) for i in result.items]
+    )
+    items = [
+        VocabCardItem(
+            hanzi=line.hanzi, pinyin=line.pinyin, meaning_vi=line.meaning_vi, icon_prompt=orig.icon_prompt
+        )
+        for line, orig in zip(filled_lines, result.items)
+    ]
+    result = VocabTopicResult(
+        radical=result.radical,
+        radical_pinyin=result.radical_pinyin,
+        radical_meaning_vi=result.radical_meaning_vi,
+        items=items,
+    )
+
+    mascot_paths = [
+        generate_image(build_mascot_prompt(item.icon_prompt), cache_dir=f"{work_dir}/mascots")
+        for item in items
+    ]
+
+    row_durations: list[float] = []
+    all_audio_paths: list[str] = []
+    for index, item in enumerate(items):
+        row_duration = 0.0
+        for seg_index, segment in enumerate(template.segments):
+            text = item.hanzi if segment.lang == "zh" else item.meaning_vi
+            audio_path = f"{work_dir}/vocab_audio_{index}_{seg_index}.mp3"
+            try:
+                synthesize(text, segment.lang, audio_path)
+            except TTSError:
+                make_silence(audio_path, seconds=2.0)
+            all_audio_paths.append(audio_path)
+            row_duration += get_audio_duration(audio_path)
+        row_durations.append(row_duration)
+
+    has_header = result.radical is not None
+    video_paths: dict[str, str] = {}
+    assembly_errors: dict[str, str] = {}
+    for ratio in aspect_ratios:
+        size = ASPECT_SIZES[ratio]
+        try:
+            target_w, target_h = size
+            render_size = (target_w, int(target_h / DEFAULT_ZOOM_HEIGHT_FRAC))
+            card = draw_vocab_card(result, mascot_paths, render_size)
+            card_path = f"{work_dir}/vocab_card_{ratio.replace(':', 'x')}.png"
+            card.save(card_path)
+            y_centers = row_regions(render_size, len(items), has_header)
+            clip = make_highlight_clip(card_path, y_centers, row_durations, size)
+            audio_clips = [AudioFileClip(p) for p in all_audio_paths]
+            clip = clip.with_audio(concatenate_audioclips(audio_clips))
+            out_path = f"{work_dir}/output_{ratio.replace(':', 'x')}.mp4"
+            try:
+                clip.write_videofile(out_path, fps=24, codec="libx264", audio_codec="aac", logger=None)
+                video_paths[ratio] = out_path
+            finally:
+                clip.close()
+        except Exception as exc:  # noqa: BLE001 - a bad ratio must not stop the others
+            assembly_errors[ratio] = str(exc)
+
+    return PipelineResult(video_paths=video_paths, item_errors=[], assembly_errors=assembly_errors)
+
+
+def run_dialogue_pipeline(
+    result: DialogueResult,
+    template: AudioTemplate,
+    aspect_ratios: list[str],
+    work_dir: str,
+) -> PipelineResult:
+    speaker_names = list(dict.fromkeys(turn.speaker_name for turn in result.turns))
+    avatar_paths = {
+        name: generate_image(build_avatar_prompt(name), cache_dir=f"{work_dir}/avatars")
+        for name in speaker_names
+    }
+
     scene_clips: dict[str, list] = {ratio: [] for ratio in aspect_ratios}
     item_errors: list[ItemResult] = []
 
-    for index, item in enumerate(items):
+    for index, turn in enumerate(result.turns):
         try:
+            line = fill_pinyin_batch([turn.line])[0]
             audio_paths = []
             for seg_index, segment in enumerate(template.segments):
-                text = item.hanzi if segment.lang == "zh" else item.meaning_vi
-                audio_path = f"{work_dir}/audio_{index}_{seg_index}.mp3"
+                text = line.hanzi if segment.lang == "zh" else line.meaning_vi
+                audio_path = f"{work_dir}/dlg_audio_{index}_{seg_index}.mp3"
                 synthesize(text, segment.lang, audio_path)
                 audio_paths.append(audio_path)
 
-            prompt = build_image_prompt(item)
-            image_path = generate_image(prompt, cache_dir=f"{work_dir}/images")
-
+            accent_index = speaker_names.index(turn.speaker_name)
             for ratio in aspect_ratios:
-                clip = build_scene_clip(item, template, audio_paths, image_path, ratio)
+                size = ASPECT_SIZES[ratio]
+                card = draw_dialogue_turn(
+                    DialogueTurn(speaker_name=turn.speaker_name, line=line),
+                    avatar_paths[turn.speaker_name],
+                    accent_index,
+                    size,
+                )
+                card_path = f"{work_dir}/dlg_card_{index}_{ratio.replace(':', 'x')}.png"
+                card.save(card_path)
+                clip = build_static_scene_clip(card_path, audio_paths, ratio)
                 scene_clips[ratio].append(clip)
-        except Exception as exc:  # noqa: BLE001 - one bad item must not stop the batch
-            item_errors.append(ItemResult(item=item, error=str(exc)))
+        except Exception as exc:  # noqa: BLE001 - one bad turn must not stop the batch
+            item_errors.append(ItemResult(item=turn.line, error=str(exc)))
 
     video_paths: dict[str, str] = {}
     assembly_errors: dict[str, str] = {}
@@ -59,7 +151,7 @@ def run_pipeline(
         try:
             assemble_video(clips, out_path)
             video_paths[ratio] = out_path
-        except Exception as exc:  # noqa: BLE001 - ffmpeg failure must not crash the whole run
+        except Exception as exc:  # noqa: BLE001
             assembly_errors[ratio] = str(exc)
 
     return PipelineResult(

@@ -5,12 +5,25 @@ from pathlib import Path
 import gradio as gr
 
 from audio.templates import list_templates
-from content.auto import generate_lesson, groq_llm_call
+from content.auto import groq_llm_call
+from content.dialogue_topic import generate_dialogue_topic
 from content.manual import parse_manual_input
-from pipeline import run_pipeline
+from content.schema import VocabCardItem, VocabTopicResult
+from content.vocab_topic import generate_vocab_topic
+from pipeline import run_dialogue_pipeline, run_vocab_card_pipeline
 from render.assemble import ASPECT_SIZES
 
 TEMPLATES_DIR = Path(__file__).parent / "config" / "templates"
+
+MODES = ["Nhập danh sách", "Từ vựng theo chủ đề", "Hội thoại theo chủ đề"]
+
+# render.vocab_card.draw_vocab_card uses a fixed-height row layout with no
+# per-item font-size floor, so it crashes (font size 0) once rows get too
+# thin. Empirically the smallest confirmed-safe count across ASPECT_SIZES
+# (manual-list mode never sets a header) is 19 items at 16:9 (1280x720) —
+# fails at 20. 35 items still render fine at 9:16 (720x1280). MAX_VOCAB_ITEMS
+# is set with a 3-item safety margin below the tighter (16:9) limit.
+MAX_VOCAB_ITEMS = 16
 
 
 def _load_templates():
@@ -47,21 +60,48 @@ def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
                 f"Các tỉ lệ hợp lệ: {valid}."
             )
 
-        if mode == "Nhập danh sách":
-            items, errors = parse_manual_input(csv_text)
-            warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
-        else:
-            items = generate_lesson(topic, groq_llm_call)
-            warnings = []
-
-        if not items:
-            message = "Không có mục hợp lệ để tạo video.\n" + "\n".join(warnings)
-            return None, None, message
+        if mode not in MODES:
+            return None, None, f"Lỗi: chế độ nhập không hợp lệ '{mode}'."
 
         work_dir = tempfile.mkdtemp(prefix="zhvideo_")
-        result = run_pipeline(items, template, aspect_ratios, work_dir)
 
-        log_lines = warnings + [f"Lỗi mục '{e.item.hanzi}': {e.error}" for e in result.item_errors]
+        if mode == "Nhập danh sách":
+            items, errors = parse_manual_input(csv_text or "")
+            warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
+            if not items:
+                message = "Không có mục hợp lệ để tạo video.\n" + "\n".join(warnings)
+                return None, None, message
+            if len(items) > MAX_VOCAB_ITEMS:
+                return None, None, (
+                    f"Lỗi: danh sách có {len(items)} mục, vượt quá giới hạn {MAX_VOCAB_ITEMS} "
+                    "mục cho phép. Vui lòng chia nhỏ danh sách."
+                )
+            vocab_result = VocabTopicResult(
+                items=[
+                    VocabCardItem(
+                        hanzi=i.hanzi, pinyin=i.pinyin, meaning_vi=i.meaning_vi, icon_prompt=i.meaning_vi
+                    )
+                    for i in items
+                ]
+            )
+            result = run_vocab_card_pipeline(vocab_result, template, aspect_ratios, work_dir)
+            log_lines = list(warnings)
+
+        elif mode == "Từ vựng theo chủ đề":
+            if not (topic or "").strip():
+                return None, None, "Lỗi: chưa nhập chủ đề/bộ thủ."
+            vocab_result = generate_vocab_topic(topic, groq_llm_call)
+            result = run_vocab_card_pipeline(vocab_result, template, aspect_ratios, work_dir)
+            log_lines = []
+
+        else:  # "Hội thoại theo chủ đề"
+            if not (topic or "").strip():
+                return None, None, "Lỗi: chưa nhập chủ đề."
+            dialogue_result = generate_dialogue_topic(topic, groq_llm_call)
+            result = run_dialogue_pipeline(dialogue_result, template, aspect_ratios, work_dir)
+            log_lines = []
+
+        log_lines += [f"Lỗi mục '{e.item.hanzi}': {e.error}" for e in result.item_errors]
         log_lines += [
             f"Lỗi dựng video ({ratio}): {msg}" for ratio, msg in result.assembly_errors.items()
         ]
@@ -79,22 +119,23 @@ def build_app() -> gr.Blocks:
 
     with gr.Blocks() as demo:
         gr.Markdown("# Tạo video dạy tiếng Trung song ngữ Việt-Trung")
-        mode = gr.Radio(
-            ["Nhập danh sách", "Chủ đề tự động"], value="Nhập danh sách", label="Chế độ nhập"
-        )
+        mode = gr.Radio(MODES, value=MODES[0], label="Chế độ nhập")
         csv_text = gr.Textbox(
             label="Danh sách CSV (hanzi,pinyin,meaning_vi)",
             placeholder="你好,nǐ hǎo,xin chào\n谢谢,xiè xie,cảm ơn",
-            info="Mỗi dòng một mục, theo thứ tự hanzi,pinyin,meaning_vi (không cần dòng tiêu đề).",
+            info="Mỗi dòng một mục, theo thứ tự hanzi,pinyin,meaning_vi (không cần dòng tiêu đề). "
+            "Dùng cho \"Nhập danh sách\".",
             lines=8,
         )
-        topic = gr.Textbox(label="Chủ đề (chế độ tự động)")
+        topic = gr.Textbox(
+            label="Chủ đề / bộ thủ",
+            placeholder="vd: đồ ăn, hoặc 冫 (bộ băng)",
+            info="Dùng cho \"Từ vựng theo chủ đề\" và \"Hội thoại theo chủ đề\".",
+        )
         template_name = gr.Dropdown(
             template_names, value=template_names[0], label="Template trình tự audio"
         )
-        aspect_ratios = gr.CheckboxGroup(
-            ["9:16", "16:9"], value=["9:16"], label="Tỉ lệ khung hình"
-        )
+        aspect_ratios = gr.CheckboxGroup(["9:16", "16:9"], value=["9:16"], label="Tỉ lệ khung hình")
         submit = gr.Button("Tạo video")
         video_9_16 = gr.Video(label="Video 9:16")
         video_16_9 = gr.Video(label="Video 16:9")
@@ -111,7 +152,5 @@ def build_app() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    # Render (and most PaaS hosts) assign the listen port via $PORT and expect
-    # the process to bind 0.0.0.0, not the Gradio default of 127.0.0.1:7860.
     port = int(os.environ.get("PORT", 7860))
     build_app().launch(server_name="0.0.0.0", server_port=port)
