@@ -1,6 +1,4 @@
-from moviepy import AudioFileClip, VideoClip, concatenate_audioclips, concatenate_videoclips
-
-from render.kenburns import make_kenburns_clip
+from moviepy import AudioFileClip, ImageClip, VideoClip, concatenate_audioclips, concatenate_videoclips
 
 ASPECT_SIZES = {
     "9:16": (720, 1280),
@@ -9,16 +7,18 @@ ASPECT_SIZES = {
 
 
 def build_static_scene_clip(image_path: str, audio_paths: list[str], aspect_ratio: str) -> VideoClip:
-    """Ken Burns pan over an already-fully-rendered card image (text baked in
-    by the caller) plus its audio track — no per-frame text overlay.
+    """A genuinely still frame (no pan/zoom) of an already-fully-rendered
+    card image (text baked in by the caller) plus its audio track — no
+    per-frame text overlay, no motion. The card is already drawn at exactly
+    `ASPECT_SIZES[aspect_ratio]` by the caller, so no resize/crop is needed
+    here either.
     """
-    size = ASPECT_SIZES[aspect_ratio]
     audio_clips = [AudioFileClip(p) for p in audio_paths]
     # concatenate_audioclips() reads from these clips lazily at write_videofile
     # time, so they must stay open — do not close them here.
     scene_audio = concatenate_audioclips(audio_clips)
     duration = sum(clip.duration for clip in audio_clips)
-    background = make_kenburns_clip(image_path, duration=duration, size=size)
+    background = ImageClip(image_path, duration=duration)
     return background.with_audio(scene_audio)
 
 
