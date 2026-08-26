@@ -1,10 +1,11 @@
-from visuals.prompt_builder import build_avatar_prompt, build_mascot_prompt
+from visuals.prompt_builder import build_avatar_prompt, build_scene_prompt
 
 
-def test_build_mascot_prompt_includes_icon_prompt_and_no_text_request():
-    prompt = build_mascot_prompt("cute ice cube character")
-    assert "cute ice cube character" in prompt
+def test_build_scene_prompt_includes_icon_prompt_and_no_text_request():
+    prompt = build_scene_prompt("a man walking into an office, waving")
+    assert "a man walking into an office, waving" in prompt
     assert "no text" in prompt
+    assert "unambiguously" in prompt
 
 
 def test_build_avatar_prompt_excludes_speaker_name_and_includes_no_text_request():

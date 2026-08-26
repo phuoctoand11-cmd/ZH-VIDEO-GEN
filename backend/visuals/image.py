@@ -65,21 +65,24 @@ def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Ima
     return image
 
 
-def generate_image(prompt: str, cache_dir: str, max_retries: int = 1) -> str:
+def generate_image(
+    prompt: str, cache_dir: str, max_retries: int = 1, size: tuple[int, int] = (768, 768)
+) -> str:
     cache_path = Path(cache_dir) / f"{hashlib.sha256(prompt.encode()).hexdigest()}.png"
     if cache_path.exists():
         return str(cache_path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-    width, height, steps = 768, 768, 4
+    width, height = size
+    steps = 4
     for attempt in range(max_retries + 1):
         try:
             image = _generate(prompt, width=width, height=height, steps=steps)
             image.save(cache_path)
             return str(cache_path)
         except Exception:  # noqa: BLE001 - fall back to a placeholder below
-            width, height, steps = 512, 512, 2
+            width, height, steps = width // 2, height // 2, 2
 
-    placeholder = make_placeholder_image(prompt[:40])
+    placeholder = make_placeholder_image(prompt[:40], size=size)
     placeholder.save(cache_path)
     return str(cache_path)

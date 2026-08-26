@@ -19,7 +19,7 @@ def test_draw_dialogue_turn_returns_correct_size(tmp_path, size):
         speaker_name="Minh", line=LessonItem(hanzi="你好", pinyin="nǐ hǎo", meaning_vi="xin chào")
     )
 
-    card = draw_dialogue_turn(turn, _make_avatar(tmp_path), accent_index=0, size=size)
+    card = draw_dialogue_turn(turn, _make_avatar(tmp_path), size=size)
     assert card.size == size
 
 
@@ -32,15 +32,16 @@ def test_draw_dialogue_turn_wraps_long_hanzi_sentence_without_crashing(tmp_path,
     )
     turn = DialogueTurn(speaker_name="Lan", line=long_line)
 
-    card = draw_dialogue_turn(turn, _make_avatar(tmp_path), accent_index=1, size=size)
+    card = draw_dialogue_turn(turn, _make_avatar(tmp_path), size=size)
     assert card.size == size
 
 
 @pytest.mark.parametrize("size", SIZES)
-def test_draw_dialogue_turn_cycles_accent_color_by_index(tmp_path, size):
-    turn = DialogueTurn(speaker_name="Minh", line=LessonItem(hanzi="嗨", meaning_vi="chào"))
+def test_draw_dialogue_turn_renders_different_speakers_without_crashing(tmp_path, size):
     avatar = _make_avatar(tmp_path)
+    turn_a = DialogueTurn(speaker_name="Minh", line=LessonItem(hanzi="嗨", meaning_vi="chào"))
+    turn_b = DialogueTurn(speaker_name="Lan", line=LessonItem(hanzi="嗨", meaning_vi="chào"))
 
-    card0 = draw_dialogue_turn(turn, avatar, accent_index=0, size=size)
-    card1 = draw_dialogue_turn(turn, avatar, accent_index=1, size=size)
-    assert card0.getpixel((10, 10)) != card1.getpixel((10, 10))
+    card_a = draw_dialogue_turn(turn_a, avatar, size=size)
+    card_b = draw_dialogue_turn(turn_b, avatar, size=size)
+    assert card_a.size == size == card_b.size

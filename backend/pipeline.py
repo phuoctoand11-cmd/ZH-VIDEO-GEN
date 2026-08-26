@@ -14,7 +14,9 @@ from render.assemble import ASPECT_SIZES, assemble_video, build_static_scene_cli
 from render.dialogue_card import draw_dialogue_turn
 from render.vocab_card import draw_vocab_card
 from visuals.image import generate_image
-from visuals.prompt_builder import build_avatar_prompt, build_mascot_prompt
+from visuals.prompt_builder import build_avatar_prompt, build_scene_prompt
+
+SCENE_IMAGE_SIZE = (768, 576)
 
 
 @dataclass
@@ -52,8 +54,12 @@ def run_vocab_card_pipeline(
         items=items,
     )
 
-    mascot_paths = [
-        generate_image(build_mascot_prompt(item.icon_prompt), cache_dir=f"{work_dir}/mascots")
+    image_paths = [
+        generate_image(
+            build_scene_prompt(item.icon_prompt),
+            cache_dir=f"{work_dir}/scenes",
+            size=SCENE_IMAGE_SIZE,
+        )
         for item in items
     ]
 
@@ -73,7 +79,7 @@ def run_vocab_card_pipeline(
     for ratio in aspect_ratios:
         size = ASPECT_SIZES[ratio]
         try:
-            card = draw_vocab_card(result, mascot_paths, size)
+            card = draw_vocab_card(result, image_paths, size)
             card_path = f"{work_dir}/vocab_card_{ratio.replace(':', 'x')}.png"
             card.save(card_path)
             clip = build_static_scene_clip(card_path, all_audio_paths, ratio)
@@ -114,13 +120,11 @@ def run_dialogue_pipeline(
                 synthesize(text, segment.lang, audio_path)
                 audio_paths.append(audio_path)
 
-            accent_index = speaker_names.index(turn.speaker_name)
             for ratio in aspect_ratios:
                 size = ASPECT_SIZES[ratio]
                 card = draw_dialogue_turn(
                     DialogueTurn(speaker_name=turn.speaker_name, line=line),
                     avatar_paths[turn.speaker_name],
-                    accent_index,
                     size,
                 )
                 card_path = f"{work_dir}/dlg_card_{index}_{ratio.replace(':', 'x')}.png"

@@ -10,11 +10,15 @@ _AVATAR_VARIANTS = [
 ]
 
 
-def build_mascot_prompt(icon_prompt: str) -> str:
+def build_scene_prompt(icon_prompt: str) -> str:
     return (
-        f"A cute chibi sticker illustration of {icon_prompt}. Flat vector style, "
-        f"bright pastel colors, thick outline, centered on a plain white background, "
-        f"no text, no letters, no watermark, kawaii mascot style."
+        f"A colorful children's-book illustration that clearly and literally depicts: "
+        f"{icon_prompt}. The scene must unambiguously show this exact action, object, "
+        f"or person so a viewer instantly recognizes what it is — accuracy to the "
+        f"description matters more than decoration. Cute semi-realistic cartoon "
+        f"characters, soft shading, warm friendly color palette, simple uncluttered "
+        f"background, landscape orientation, no text, no letters, no numbers, no "
+        f"watermark."
     )
 
 

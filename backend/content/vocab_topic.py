@@ -10,8 +10,11 @@ from content.schema import VocabTopicResult
 PROMPT_TEMPLATE = (
     "Bạn là giáo viên tiếng Trung. Chủ đề hoặc bộ thủ: \"{topic}\". "
     "Soạn đúng 5 từ tiếng Trung liên quan (nếu là 1 bộ thủ, chọn 5 từ có chứa bộ thủ đó). "
-    "Với mỗi từ, viết icon_prompt là mô tả NGẮN BẰNG TIẾNG ANH cho 1 hình minh họa mascot dễ "
-    "thương đại diện nghĩa của từ (không nhắc chữ Hán, không yêu cầu vẽ chữ trong ảnh). "
+    "Với mỗi từ, viết icon_prompt là mô tả NGẮN BẰNG TIẾNG ANH cho 1 hình minh họa cảnh thực tế "
+    "thể hiện ĐÚNG hành động/đồ vật/tình huống của từ đó (ví dụ từ \"đi làm\" (上班) → mô tả "
+    "cảnh 1 người mặc vest bước ra cửa vẫy tay, có đồng hồ chỉ giờ sáng — không mô tả chung "
+    "chung, không nhắc chữ Hán, không yêu cầu vẽ chữ trong ảnh). Mô tả phải đủ cụ thể để người "
+    "xem nhận ra ngay đúng nghĩa của từ chỉ qua hình. "
     "Nếu topic là 1 bộ thủ cụ thể, điền radical (chính bộ thủ đó), radical_pinyin, "
     "radical_meaning_vi; nếu không, để 3 trường này là null. "
     "Trả về CHỈ JSON theo đúng schema sau, không thêm giải thích:\n"

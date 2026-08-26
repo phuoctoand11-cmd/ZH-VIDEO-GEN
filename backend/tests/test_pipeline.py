@@ -14,11 +14,11 @@ import pipeline as pipeline_module
 from pipeline import run_dialogue_pipeline, run_vocab_card_pipeline
 
 
-def _fake_generate_image_for_cards(prompt, cache_dir):
+def _fake_generate_image_for_cards(prompt, cache_dir, size=(200, 200)):
     Path(cache_dir).mkdir(parents=True, exist_ok=True)
     path = Path(cache_dir) / f"{abs(hash(prompt))}.png"
     if not path.exists():
-        Image.new("RGB", (200, 200), color=(255, 255, 255)).save(path)
+        Image.new("RGB", size, color=(255, 255, 255)).save(path)
     return str(path)
 
 
