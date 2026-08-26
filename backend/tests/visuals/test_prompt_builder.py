@@ -5,7 +5,9 @@ def test_build_scene_prompt_includes_icon_prompt_and_no_text_request():
     prompt = build_scene_prompt("a man walking into an office, waving")
     assert "a man walking into an office, waving" in prompt
     assert "no text" in prompt
-    assert "unambiguously" in prompt
+    # Guards against unrelated decorative filler (plants, hearts) the model
+    # was observed adding in production even when icon_prompt was followed.
+    assert "do not add any other background" in prompt
 
 
 def test_build_avatar_prompt_excludes_speaker_name_and_includes_no_text_request():

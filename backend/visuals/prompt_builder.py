@@ -10,14 +10,16 @@ _AVATAR_VARIANTS = [
 ]
 
 
-# Passed as negative_prompt alongside build_scene_prompt's output — FLUX.1-dev
-# (unlike schnell) actually honors negative_prompt, so this is a second lever
-# on top of the model switch for suppressing the same failure modes the
-# "no text" clause in build_scene_prompt already targets, plus general
-# quality/anatomy artifacts.
+# Passed as negative_prompt alongside build_scene_prompt's output. Verified on
+# production (Cloudflare phoenix-1.0): without the "unrelated ..." entries
+# here, the model reliably filled scenes with generic decorative filler
+# (potted plants, hearts, pumpkins) that has nothing to do with icon_prompt —
+# these entries target that specific, observed failure, not a guessed one.
 SCENE_NEGATIVE_PROMPT = (
     "blurry, low quality, distorted, deformed, extra limbs, extra fingers, "
-    "text, letters, words, watermark, logo, signature, caption, jpeg artifacts"
+    "text, letters, words, watermark, logo, signature, caption, jpeg artifacts, "
+    "unrelated background objects, random potted plants, decorative hearts, "
+    "generic scenery unrelated to the description"
 )
 
 
@@ -26,18 +28,22 @@ def build_scene_prompt(icon_prompt: str) -> str:
     # two ways at once: it biased FLUX toward generic kid-in-nature scenes
     # that ignored icon_prompt, and it added storybook-style decorative
     # captions (broken pseudo-text) onto the image — a real regression
-    # observed on production, not a guess. This wording instead reuses the
-    # flat-vector/chibi/kawaii framing from the mascot prompts elsewhere in
-    # this file, which never triggered embedded text across this whole
-    # project, and puts icon_prompt first for the strongest prompt weight.
+    # observed on production, not a guess. The flat-vector/chibi/kawaii framing
+    # kept below never triggered embedded text, so it stayed; what was added
+    # is the explicit "nothing else in the frame" constraint — production
+    # testing (Cloudflare phoenix-1.0) showed the model otherwise pads scenes
+    # with unrelated decorative filler (plants, hearts) even with icon_prompt
+    # first for strongest weight, so it needs to be told not to invent extras,
+    # not just told what the scene is.
     return (
-        f"{icon_prompt}. Flat-vector digital illustration, accurately and literally "
-        f"depicting this exact scene — the action, objects, and setting must be "
-        f"unambiguously recognizable, that matters more than decoration. Cute rounded "
-        f"chibi-style character design, soft shading, bright warm colors, thick clean "
-        f"outlines, simple uncluttered background, kawaii illustration style, landscape "
-        f"orientation, no text, no letters, no words, no numbers, no captions, no "
-        f"watermark, no logos."
+        f"A cute illustration showing exactly this and nothing else: {icon_prompt}. "
+        f"Every object, prop, and character visible in the image must come "
+        f"directly from that description — do not add any other background "
+        f"objects, decorations, plants, or characters that are not part of it. "
+        f"Flat-vector digital illustration, chibi-style character design where a "
+        f"person is shown, soft shading, bright warm colors, thick clean outlines, "
+        f"plain uncluttered background, landscape orientation, no text, no "
+        f"letters, no words, no numbers, no captions, no watermark, no logos."
     )
 
 

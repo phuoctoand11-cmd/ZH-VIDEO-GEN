@@ -13,10 +13,11 @@ logger = logging.getLogger(__name__)
 MODEL_ID = "@cf/leonardo/phoenix-1.0"
 API_BASE = "https://api.cloudflare.com/client/v4/accounts"
 # Phoenix's guidance range is 2-10 (Cloudflare's own default is 2, the low
-# end); we bias toward the high end because scene illustrations must match
-# the vocabulary item's meaning, and stronger prompt adherence matters more
-# here than generation variety.
-DEFAULT_GUIDANCE = 8
+# end). Verified on production at guidance=8: scenes still drifted toward
+# generic decorative filler unrelated to the prompt (see SCENE_NEGATIVE_PROMPT
+# in prompt_builder.py) — pushed to the max since context accuracy matters
+# more here than generation variety or compositional smoothness.
+DEFAULT_GUIDANCE = 10
 DEFAULT_STEPS = 30
 # A retry after a failed attempt still needs enough steps to converge to
 # something coherent, just cheaper than the first attempt.
