@@ -1,7 +1,13 @@
 from PIL import Image, ImageDraw
 
 from content.schema import VocabTopicResult
-from render.theme import get_cjk_font, get_rounded_font, make_white_transparent, palette_color
+from render.theme import (
+    get_cjk_font,
+    get_rounded_font,
+    make_white_transparent,
+    palette_color,
+    wrap_text_to_width,
+)
 
 MARGIN = 40
 HEADER_HEIGHT = 220
@@ -86,25 +92,41 @@ def _draw_row(
     badge_font = get_rounded_font(int(badge_r), "Bold")
     draw.text((badge_cx, badge_cy), str(index + 1), fill=(50, 50, 50), font=badge_font, anchor="mm")
 
-    hanzi_font = get_cjk_font(int(row_height * 0.5))
-    pinyin_font = get_rounded_font(int(row_height * 0.2), "Bold")
-    meaning_font = get_rounded_font(int(row_height * 0.18), "Medium")
+    hanzi_font = get_cjk_font(int(row_height * 0.42))
+    pinyin_size = int(row_height * 0.16)
+    meaning_size = int(row_height * 0.15)
+    pinyin_font = get_rounded_font(pinyin_size, "Bold")
+    meaning_font = get_rounded_font(meaning_size, "Medium")
 
     text_x = x0 + 130
-    draw.text((text_x, y0 + row_height * 0.1), item.hanzi, fill=(30, 30, 30), font=hanzi_font)
-    draw.text(
-        (text_x, y0 + row_height * 0.62), item.pinyin or "", fill=(90, 60, 20), font=pinyin_font
-    )
-    draw.text(
-        (text_x + 220, y0 + row_height * 0.62),
-        item.meaning_vi,
-        fill=(60, 60, 60),
-        font=meaning_font,
-    )
+    hanzi_y = y0 + row_height * 0.06
+    draw.text((text_x, hanzi_y), item.hanzi, fill=(30, 30, 30), font=hanzi_font)
 
     mascot_size = int(row_height * 0.85)
+    mascot_x = int(x0 + row_width - mascot_size - 20)
+    bottom_limit = y0 + row_height - 6
+    # pinyin and meaning_vi stack vertically (not side by side) so both get
+    # the card's full text-column width — an LLM-generated meaning can run
+    # longer than a single word (e.g. "cơm, bữa ăn"), and a narrow side-by-
+    # side column cuts even short text off or, for a word with no spaces
+    # (e.g. "nước"), forces a per-character wrap that mangles it.
+    text_col_width = max(20, mascot_x - text_x - 10)
+
+    py = hanzi_y + hanzi_font.size * 1.15
+    for line in wrap_text_to_width(draw, item.pinyin or "", pinyin_font, text_col_width):
+        if py + pinyin_size > bottom_limit:
+            break
+        draw.text((text_x, py), line, fill=(90, 60, 20), font=pinyin_font)
+        py += pinyin_size * 1.15
+
+    my = py + 4
+    for line in wrap_text_to_width(draw, item.meaning_vi, meaning_font, text_col_width):
+        if my + meaning_size > bottom_limit:
+            break
+        draw.text((text_x, my), line, fill=(60, 60, 60), font=meaning_font)
+        my += meaning_size * 1.15
+
     mascot = make_white_transparent(Image.open(mascot_path).convert("RGB"))
     mascot = mascot.resize((mascot_size, mascot_size))
-    mascot_x = int(x0 + row_width - mascot_size - 20)
     mascot_y = int(y0 + (row_height - mascot_size) / 2)
     card.paste(mascot, (mascot_x, mascot_y), mascot)
