@@ -27,8 +27,12 @@ _PLACEHOLDER_PALETTE = [
 ]
 # huggingface_hub's InferenceClient has no read timeout by default, so a
 # stalled/cold shared endpoint would hang the request indefinitely instead of
-# falling through to the retry/placeholder path below.
-REQUEST_TIMEOUT_SECONDS = 60
+# falling through to the retry/placeholder path below. 60s was tuned for
+# schnell's 4-step generation; FLUX.1-dev's 28-step generation routinely
+# exceeded it in production (verified: 4 of 5 scene images fell back to the
+# placeholder circle on a live run), so this needs real headroom for dev's
+# per-step cost plus shared-endpoint queueing/cold-start variance.
+REQUEST_TIMEOUT_SECONDS = 180
 
 _client = None
 
