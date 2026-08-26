@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from audio.templates import AudioTemplate
-from audio.tts import TTSError, get_audio_duration, make_silence, synthesize
+from audio.tts import TTSError, make_silence, synthesize
 from content.pinyin import fill_pinyin_batch
 from content.schema import (
     DialogueResult,
@@ -10,11 +10,9 @@ from content.schema import (
     VocabCardItem,
     VocabTopicResult,
 )
-from moviepy import AudioFileClip, concatenate_audioclips
 from render.assemble import ASPECT_SIZES, assemble_video, build_static_scene_clip
 from render.dialogue_card import draw_dialogue_turn
-from render.highlight import DEFAULT_ZOOM_HEIGHT_FRAC, make_highlight_clip
-from render.vocab_card import draw_vocab_card, row_regions
+from render.vocab_card import draw_vocab_card
 from visuals.image import generate_image
 from visuals.prompt_builder import build_avatar_prompt, build_mascot_prompt
 
@@ -59,10 +57,8 @@ def run_vocab_card_pipeline(
         for item in items
     ]
 
-    row_durations: list[float] = []
     all_audio_paths: list[str] = []
     for index, item in enumerate(items):
-        row_duration = 0.0
         for seg_index, segment in enumerate(template.segments):
             text = item.hanzi if segment.lang == "zh" else item.meaning_vi
             audio_path = f"{work_dir}/vocab_audio_{index}_{seg_index}.mp3"
@@ -71,24 +67,16 @@ def run_vocab_card_pipeline(
             except TTSError:
                 make_silence(audio_path, seconds=2.0)
             all_audio_paths.append(audio_path)
-            row_duration += get_audio_duration(audio_path)
-        row_durations.append(row_duration)
 
-    has_header = result.radical is not None
     video_paths: dict[str, str] = {}
     assembly_errors: dict[str, str] = {}
     for ratio in aspect_ratios:
         size = ASPECT_SIZES[ratio]
         try:
-            target_w, target_h = size
-            render_size = (target_w, int(target_h / DEFAULT_ZOOM_HEIGHT_FRAC))
-            card = draw_vocab_card(result, mascot_paths, render_size)
+            card = draw_vocab_card(result, mascot_paths, size)
             card_path = f"{work_dir}/vocab_card_{ratio.replace(':', 'x')}.png"
             card.save(card_path)
-            y_centers = row_regions(render_size, len(items), has_header)
-            clip = make_highlight_clip(card_path, y_centers, row_durations, size)
-            audio_clips = [AudioFileClip(p) for p in all_audio_paths]
-            clip = clip.with_audio(concatenate_audioclips(audio_clips))
+            clip = build_static_scene_clip(card_path, all_audio_paths, ratio)
             out_path = f"{work_dir}/output_{ratio.replace(':', 'x')}.mp4"
             try:
                 clip.write_videofile(out_path, fps=24, codec="libx264", audio_codec="aac", logger=None)

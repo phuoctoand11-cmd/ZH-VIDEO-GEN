@@ -8,6 +8,13 @@ HEADER_HEIGHT = 220
 ROW_SPACING = 16
 
 
+def compute_row_height(size: tuple[int, int], n_items: int, has_header: bool) -> float:
+    _width, height = size
+    header_height = HEADER_HEIGHT if has_header else 0
+    available_height = height - header_height - 2 * MARGIN
+    return (available_height - (n_items - 1) * ROW_SPACING) / n_items
+
+
 def draw_vocab_card(
     result: VocabTopicResult, mascot_paths: list[str], size: tuple[int, int]
 ) -> Image.Image:
@@ -25,8 +32,7 @@ def draw_vocab_card(
         _draw_header(draw, width, header_height, result)
 
     n = len(result.items)
-    available_height = height - header_height - 2 * MARGIN
-    row_height = (available_height - (n - 1) * ROW_SPACING) / n
+    row_height = compute_row_height(size, n, bool(result.radical))
 
     for index, (item, mascot_path) in enumerate(zip(result.items, mascot_paths)):
         y0 = header_height + MARGIN + index * (row_height + ROW_SPACING)
@@ -36,10 +42,9 @@ def draw_vocab_card(
 
 
 def row_regions(size: tuple[int, int], n_items: int, has_header: bool) -> list[float]:
-    width, height = size
+    _width, height = size
     header_height = HEADER_HEIGHT if has_header else 0
-    available_height = height - header_height - 2 * MARGIN
-    row_height = (available_height - (n_items - 1) * ROW_SPACING) / n_items
+    row_height = compute_row_height(size, n_items, has_header)
     centers = []
     for index in range(n_items):
         y0 = header_height + MARGIN + index * (row_height + ROW_SPACING)
