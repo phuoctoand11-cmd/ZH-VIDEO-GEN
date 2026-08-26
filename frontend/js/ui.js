@@ -1,6 +1,6 @@
 // frontend/js/ui.js
-import { validateForm } from "./validation.js";
-import { callGenerateVideo, describeStatusEvent } from "./api.js";
+import { validateForm, validatePreviewRequest, TOPIC_MODES } from "./validation.js";
+import { callGenerateVideo, callGeneratePreview, describeStatusEvent } from "./api.js";
 import { summarizeResult } from "./result.js";
 import { connectClient } from "./gradioClient.js";
 import { SPACE_URL } from "./config.js";
@@ -104,11 +104,55 @@ function renderResult(doc, result) {
   doc.getElementById("log").textContent = result.log;
 }
 
+function updatePreviewButtonVisibility(doc) {
+  const previewBtn = doc.getElementById("preview-btn");
+  const mode = doc.querySelector('input[name="mode"]:checked')?.value;
+  previewBtn.style.display = TOPIC_MODES.includes(mode) ? "" : "none";
+}
+
+function wirePreviewButton(doc) {
+  const previewBtn = doc.getElementById("preview-btn");
+
+  previewBtn.addEventListener("click", async () => {
+    const state = readFormState(doc.getElementById("generate-form"));
+
+    const validation = validatePreviewRequest(state);
+    if (!validation.valid) {
+      setStatus(doc, validation.error);
+      return;
+    }
+
+    if (isPlaceholderSpaceUrl(SPACE_URL)) {
+      setStatus(doc, "Chưa cấu hình SPACE_URL — xem README.md.");
+      return;
+    }
+
+    previewBtn.disabled = true;
+    setStatus(doc, "Đang tạo bản xem trước...");
+
+    try {
+      const { csvText, log } = await callGeneratePreview(state, { spaceUrl: SPACE_URL, connectClient });
+      doc.getElementById("csv-text").value = csvText;
+      setStatus(doc, log);
+    } catch (err) {
+      setStatus(doc, `Lỗi: ${err.message}`);
+    } finally {
+      previewBtn.disabled = false;
+    }
+  });
+}
+
 export function initApp(doc) {
   const form = doc.getElementById("generate-form");
   const submitBtn = doc.getElementById("submit-btn");
 
   DOWNLOAD_TARGETS.forEach((target) => wireDownload(doc, target));
+
+  updatePreviewButtonVisibility(doc);
+  form.querySelectorAll('input[name="mode"]').forEach((radio) => {
+    radio.addEventListener("change", () => updatePreviewButtonVisibility(doc));
+  });
+  wirePreviewButton(doc);
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();

@@ -1,7 +1,8 @@
-import { buildApiPayload } from "./payload.js";
+import { buildApiPayload, buildPreviewPayload } from "./payload.js";
 import { parseApiResult } from "./result.js";
 
 const ENDPOINT = "/generate_video";
+const PREVIEW_ENDPOINT = "/generate_preview";
 
 // Turns a @gradio/client "status" event into human-readable Vietnamese status
 // text, or null when the event carries nothing worth showing. Written
@@ -82,4 +83,40 @@ export async function callGenerateVideo(state, { spaceUrl, connectClient, onStat
   }
 
   return parseApiResult(finalData);
+}
+
+// Asks the LLM to draft content for a topic mode and returns it as editable
+// CSV text, without rendering any video yet — mirrors callGenerateVideo's
+// submit()/event-loop shape but against the lighter /generate_preview
+// endpoint, which only ever returns (csvText, log), never a video.
+export async function callGeneratePreview(state, { spaceUrl, connectClient }) {
+  const client = await connectClient(spaceUrl);
+  const payload = buildPreviewPayload(state);
+  const job = client.submit(PREVIEW_ENDPOINT, payload, null, null, true);
+
+  let finalData = null;
+  let receivedData = false;
+
+  for await (const event of job) {
+    if (!event || typeof event !== "object") continue;
+
+    if (event.type === "data") {
+      if (Array.isArray(event.data)) {
+        finalData = event.data;
+        receivedData = true;
+      }
+      continue;
+    }
+
+    if (event.type === "status" && event.stage === "error") {
+      throw new Error(event.message || "Server báo lỗi khi tạo bản xem trước.");
+    }
+  }
+
+  if (!receivedData) {
+    throw new Error("Không nhận được bản xem trước từ server.");
+  }
+
+  const [csvText, log] = finalData;
+  return { csvText: typeof csvText === "string" ? csvText : "", log: log ?? "" };
 }

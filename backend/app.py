@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import tempfile
 from pathlib import Path
@@ -7,8 +9,8 @@ import gradio as gr
 from audio.templates import list_templates
 from content.auto import groq_llm_call
 from content.dialogue_topic import generate_dialogue_topic
-from content.manual import parse_manual_input
-from content.schema import VocabCardItem, VocabTopicResult
+from content.manual import parse_dialogue_csv_input, parse_manual_input
+from content.schema import DialogueResult, VocabCardItem, VocabTopicResult
 from content.vocab_topic import generate_vocab_topic
 from pipeline import run_dialogue_pipeline, run_vocab_card_pipeline
 from render.assemble import ASPECT_SIZES
@@ -16,6 +18,7 @@ from render.assemble import ASPECT_SIZES
 TEMPLATES_DIR = Path(__file__).parent / "config" / "templates"
 
 MODES = ["Nhập danh sách", "Từ vựng theo chủ đề", "Hội thoại theo chủ đề"]
+TOPIC_MODES = ["Từ vựng theo chủ đề", "Hội thoại theo chủ đề"]
 
 # render.vocab_card.draw_vocab_card uses a fixed-height row layout with no
 # per-item font-size floor, so it crashes (font size 0) once rows get too
@@ -31,7 +34,48 @@ def _load_templates():
     return {t.name: t for t in templates}
 
 
-def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
+def _rows_to_csv_text(rows: list[list[str]]) -> str:
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator="\n").writerows(rows)
+    return buf.getvalue().strip()
+
+
+def generate_preview(mode, topic):
+    """Asks the LLM to draft content for a topic mode and returns it as
+    editable CSV text, without rendering any video yet — the user reviews
+    or edits this text, then generate_video renders from whatever ends up
+    in that box (no second LLM call).
+
+    Always returns a 2-tuple (csv_text_or_update, log_text); any failure is
+    reported in the log text instead of propagating a traceback.
+    """
+    try:
+        if not (topic or "").strip():
+            return gr.update(), "Lỗi: chưa nhập chủ đề/bộ thủ."
+
+        if mode == "Từ vựng theo chủ đề":
+            vocab_result = generate_vocab_topic(topic, groq_llm_call)
+            rows = [
+                [item.hanzi, item.pinyin or "", item.meaning_vi] for item in vocab_result.items
+            ]
+            csv_text = _rows_to_csv_text(rows)
+            return csv_text, 'Đã tạo xong, kiểm tra/sửa rồi bấm "Tạo video".'
+
+        if mode == "Hội thoại theo chủ đề":
+            dialogue_result = generate_dialogue_topic(topic, groq_llm_call)
+            rows = [
+                [turn.speaker_name, turn.line.hanzi, turn.line.pinyin or "", turn.line.meaning_vi]
+                for turn in dialogue_result.turns
+            ]
+            csv_text = _rows_to_csv_text(rows)
+            return csv_text, 'Đã tạo xong, kiểm tra/sửa rồi bấm "Tạo video".'
+
+        return gr.update(), f"Lỗi: chế độ '{mode}' không dùng xem trước."
+    except Exception as exc:  # noqa: BLE001 - public API must never leak a raw traceback
+        return gr.update(), f"Lỗi: {exc}"
+
+
+def generate_video(mode, csv_text, template_name, aspect_ratios):
     """Entry point for both the Gradio UI and external API callers.
 
     Always returns a 3-tuple (video_9_16, video_16_9, log_text); any failure is
@@ -65,7 +109,17 @@ def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
 
         work_dir = tempfile.mkdtemp(prefix="zhvideo_")
 
-        if mode == "Nhập danh sách":
+        if mode == "Hội thoại theo chủ đề":
+            turns, errors = parse_dialogue_csv_input(csv_text or "")
+            warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
+            if not turns:
+                message = "Không có lượt thoại hợp lệ để tạo video.\n" + "\n".join(warnings)
+                return None, None, message
+            dialogue_result = DialogueResult(title="", turns=turns)
+            result = run_dialogue_pipeline(dialogue_result, template, aspect_ratios, work_dir)
+            log_lines = list(warnings)
+
+        else:  # "Nhập danh sách" or "Từ vựng theo chủ đề" — both render from csv_text
             items, errors = parse_manual_input(csv_text or "")
             warnings = [f"Dòng {e.line_number}: {e.message}" for e in errors]
             if not items:
@@ -86,20 +140,6 @@ def generate_video(mode, csv_text, topic, template_name, aspect_ratios):
             )
             result = run_vocab_card_pipeline(vocab_result, template, aspect_ratios, work_dir)
             log_lines = list(warnings)
-
-        elif mode == "Từ vựng theo chủ đề":
-            if not (topic or "").strip():
-                return None, None, "Lỗi: chưa nhập chủ đề/bộ thủ."
-            vocab_result = generate_vocab_topic(topic, groq_llm_call)
-            result = run_vocab_card_pipeline(vocab_result, template, aspect_ratios, work_dir)
-            log_lines = []
-
-        else:  # "Hội thoại theo chủ đề"
-            if not (topic or "").strip():
-                return None, None, "Lỗi: chưa nhập chủ đề."
-            dialogue_result = generate_dialogue_topic(topic, groq_llm_call)
-            result = run_dialogue_pipeline(dialogue_result, template, aspect_ratios, work_dir)
-            log_lines = []
 
         log_lines += [f"Lỗi mục '{e.item.hanzi}': {e.error}" for e in result.item_errors]
         log_lines += [
@@ -132,6 +172,7 @@ def build_app() -> gr.Blocks:
             placeholder="vd: đồ ăn, hoặc 冫 (bộ băng)",
             info="Dùng cho \"Từ vựng theo chủ đề\" và \"Hội thoại theo chủ đề\".",
         )
+        preview_btn = gr.Button("Xem trước", visible=(MODES[0] in TOPIC_MODES))
         template_name = gr.Dropdown(
             template_names, value=template_names[0], label="Template trình tự audio"
         )
@@ -141,9 +182,22 @@ def build_app() -> gr.Blocks:
         video_16_9 = gr.Video(label="Video 16:9")
         log = gr.Textbox(label="Log", lines=6)
 
+        mode.change(
+            fn=lambda m: gr.update(visible=m in TOPIC_MODES),
+            inputs=[mode],
+            outputs=[preview_btn],
+        )
+
+        preview_btn.click(
+            generate_preview,
+            inputs=[mode, topic],
+            outputs=[csv_text, log],
+            api_name="generate_preview",
+        )
+
         submit.click(
             generate_video,
-            inputs=[mode, csv_text, topic, template_name, aspect_ratios],
+            inputs=[mode, csv_text, template_name, aspect_ratios],
             outputs=[video_9_16, video_16_9, log],
             api_name="generate_video",
         )

@@ -1,4 +1,4 @@
-from content.manual import parse_manual_input
+from content.manual import parse_dialogue_csv_input, parse_manual_input
 
 
 def test_parse_manual_input_valid_rows():
@@ -48,3 +48,39 @@ def test_parse_manual_input_without_header_row_reports_correct_line_numbers():
     assert len(errors) == 1
     assert errors[0].line_number == 1
     assert "hanzi" in errors[0].message
+
+
+def test_parse_dialogue_csv_input_valid_rows():
+    csv_text = "speaker,hanzi,pinyin,meaning_vi\nMinh,你好,nǐ hǎo,xin chào\nLan,你好吗,,khỏe không\n"
+    turns, errors = parse_dialogue_csv_input(csv_text)
+    assert len(turns) == 2
+    assert errors == []
+    assert turns[0].speaker_name == "Minh"
+    assert turns[0].line.hanzi == "你好"
+    assert turns[0].line.pinyin == "nǐ hǎo"
+    assert turns[1].line.pinyin is None
+
+
+def test_parse_dialogue_csv_input_without_header_row():
+    csv_text = "Minh,你好,nǐ hǎo,xin chào\n"
+    turns, errors = parse_dialogue_csv_input(csv_text)
+    assert len(turns) == 1
+    assert errors == []
+    assert turns[0].speaker_name == "Minh"
+
+
+def test_parse_dialogue_csv_input_skips_missing_speaker():
+    csv_text = "speaker,hanzi,pinyin,meaning_vi\n,你好,nǐ hǎo,xin chào\nLan,你好吗,,khỏe không\n"
+    turns, errors = parse_dialogue_csv_input(csv_text)
+    assert len(turns) == 1
+    assert len(errors) == 1
+    assert "speaker" in errors[0].message
+
+
+def test_parse_dialogue_csv_input_skips_missing_hanzi_and_meaning():
+    csv_text = "speaker,hanzi,pinyin,meaning_vi\nMinh,,nǐ hǎo,xin chào\nLan,你好吗,,\n"
+    turns, errors = parse_dialogue_csv_input(csv_text)
+    assert len(turns) == 0
+    assert len(errors) == 2
+    assert "hanzi" in errors[0].message
+    assert "meaning_vi" in errors[1].message

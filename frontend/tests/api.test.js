@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callGenerateVideo, describeStatusEvent } from "../js/api.js";
+import { callGenerateVideo, callGeneratePreview, describeStatusEvent } from "../js/api.js";
 
 // Stands in for the async-iterable job returned by @gradio/client's submit().
 function fakeJob(events) {
@@ -21,7 +21,7 @@ test("callGenerateVideo builds the payload, calls the named endpoint, and parses
   const fakeClient = {
     submit: (endpoint, payload, ...rest) => {
       assert.equal(endpoint, "/generate_video");
-      assert.deepEqual(payload, ["Nhập danh sách", "吃,chī,ăn", "", "zh-zh-vi", ["9:16"]]);
+      assert.deepEqual(payload, ["Nhập danh sách", "吃,chī,ăn", "zh-zh-vi", ["9:16"]]);
       // A default-options @gradio/client only forwards "data" events unless
       // all_events (the 5th positional arg) is true — this must stay true or
       // every status/error-stage event is silently dropped before this test
@@ -122,6 +122,57 @@ test("callGenerateVideo survives an onStatus callback that throws", async () => 
   });
 
   assert.equal(result.video9x16Url, "https://x/a.mp4");
+});
+
+test("callGeneratePreview builds the payload, calls the named endpoint, and returns csvText/log", async () => {
+  const fakeClient = {
+    submit: (endpoint, payload, ...rest) => {
+      assert.equal(endpoint, "/generate_preview");
+      assert.deepEqual(payload, ["Từ vựng theo chủ đề", "đồ ăn"]);
+      assert.deepEqual(rest, [null, null, true]);
+      return fakeJob([{ type: "data", data: ["冰,bīng,băng", "Đã tạo xong."] }]);
+    },
+  };
+  const connectClient = async (url) => {
+    assert.equal(url, "https://fake-space");
+    return fakeClient;
+  };
+
+  const result = await callGeneratePreview(
+    { mode: "Từ vựng theo chủ đề", topic: "đồ ăn" },
+    { spaceUrl: "https://fake-space", connectClient }
+  );
+
+  assert.equal(result.csvText, "冰,bīng,băng");
+  assert.equal(result.log, "Đã tạo xong.");
+});
+
+test("callGeneratePreview throws when the job reports an error stage", async () => {
+  const connectClient = async () => ({
+    submit: () => fakeJob([{ type: "status", stage: "error", message: "groq exploded" }]),
+  });
+
+  await assert.rejects(
+    () => callGeneratePreview(
+      { mode: "Từ vựng theo chủ đề", topic: "đồ ăn" },
+      { spaceUrl: "https://fake-space", connectClient }
+    ),
+    /groq exploded/
+  );
+});
+
+test("callGeneratePreview throws when the job ends without a data event", async () => {
+  const connectClient = async () => ({
+    submit: () => fakeJob([{ type: "status", stage: "pending", queue: true }]),
+  });
+
+  await assert.rejects(
+    () => callGeneratePreview(
+      { mode: "Từ vựng theo chủ đề", topic: "đồ ăn" },
+      { spaceUrl: "https://fake-space", connectClient }
+    ),
+    /Không nhận được bản xem trước/
+  );
 });
 
 test("describeStatusEvent renders queue position, generating, and error stages", () => {
