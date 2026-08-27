@@ -11,39 +11,47 @@ _AVATAR_VARIANTS = [
 
 
 # Passed as negative_prompt alongside build_scene_prompt's output. Verified on
-# production (Cloudflare phoenix-1.0): without the "unrelated ..." entries
-# here, the model reliably filled scenes with generic decorative filler
-# (potted plants, hearts, pumpkins) that has nothing to do with icon_prompt —
-# these entries target that specific, observed failure, not a guessed one.
+# production (Cloudflare phoenix-1.0) across two separate rounds: round 1
+# (no "unrelated ..." entries) let the model fill scenes with generic
+# decorative filler (potted plants, hearts, pumpkins); round 2 (those
+# entries added, but the positive prompt still said "chibi-style character
+# design") produced a random anime girl in EVERY scene regardless of topic —
+# including "con gà" (chicken), which has no person in it at all — plus
+# garbled embedded text despite the "no text" entries already here. This
+# round adds "random person"/"unrelated character" and strengthens the text
+# entries; the actual fix for the random-character problem is in the
+# positive prompt below (it was instructing one into existence).
 SCENE_NEGATIVE_PROMPT = (
     "blurry, low quality, distorted, deformed, extra limbs, extra fingers, "
     "text, letters, words, watermark, logo, signature, caption, jpeg artifacts, "
     "unrelated background objects, random potted plants, decorative hearts, "
-    "generic scenery unrelated to the description"
+    "generic scenery unrelated to the description, random person, "
+    "unrelated character, signage, handwriting, gibberish text, sticker text"
 )
 
 
 def build_scene_prompt(icon_prompt: str) -> str:
-    # "children's-book illustration" was tried first and reliably went wrong
-    # two ways at once: it biased FLUX toward generic kid-in-nature scenes
-    # that ignored icon_prompt, and it added storybook-style decorative
-    # captions (broken pseudo-text) onto the image — a real regression
-    # observed on production, not a guess. The flat-vector/chibi/kawaii framing
-    # kept below never triggered embedded text, so it stayed; what was added
-    # is the explicit "nothing else in the frame" constraint — production
-    # testing (Cloudflare phoenix-1.0) showed the model otherwise pads scenes
-    # with unrelated decorative filler (plants, hearts) even with icon_prompt
-    # first for strongest weight, so it needs to be told not to invent extras,
-    # not just told what the scene is.
+    # History of this prompt (each change verified on production, not
+    # guessed): "children's-book illustration" biased FLUX toward generic
+    # kid-in-nature scenes with storybook captions. Reusing the
+    # flat-vector/kawaii framing fixed that, but Cloudflare phoenix-1.0 then
+    # padded scenes with unrelated decorative filler (plants, hearts) even
+    # with icon_prompt first for strongest weight — fixed by the explicit
+    # "nothing else in the frame" constraint below. That in turn revealed
+    # the current bug: this prompt used to say "chibi-style character design
+    # where a person is shown", intending it as conditional, but the model
+    # read it as an instruction to always add a character — every scene got
+    # the same anime girl, even for "con gà" (chicken), which has no person
+    # in it. Style words now describe rendering technique only (how to draw
+    # whatever the subject is), never content (what to draw).
     return (
-        f"A cute illustration showing exactly this and nothing else: {icon_prompt}. "
-        f"Every object, prop, and character visible in the image must come "
-        f"directly from that description — do not add any other background "
-        f"objects, decorations, plants, or characters that are not part of it. "
-        f"Flat-vector digital illustration, chibi-style character design where a "
-        f"person is shown, soft shading, bright warm colors, thick clean outlines, "
-        f"plain uncluttered background, landscape orientation, no text, no "
-        f"letters, no words, no numbers, no captions, no watermark, no logos."
+        f"{icon_prompt}. Depict only the exact subject described above — no "
+        f"additional characters, people, animals, plants, or props unless "
+        f"they are explicitly part of that description. Flat-vector kawaii "
+        f"illustration style, soft shading, bright warm colors, thick clean "
+        f"outlines, plain simple background, landscape orientation, no text, "
+        f"no letters, no words, no numbers, no captions, no watermark, no "
+        f"logos, no signage."
     )
 
 

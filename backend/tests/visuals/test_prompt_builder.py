@@ -7,7 +7,19 @@ def test_build_scene_prompt_includes_icon_prompt_and_no_text_request():
     assert "no text" in prompt
     # Guards against unrelated decorative filler (plants, hearts) the model
     # was observed adding in production even when icon_prompt was followed.
-    assert "do not add any other background" in prompt
+    assert "no additional characters, people, animals, plants, or props" in prompt
+
+
+def test_build_scene_prompt_never_mandates_a_character():
+    # Regression test: this prompt used to say "chibi-style character design
+    # where a person is shown", intended as conditional, but production
+    # testing showed the model read it as an unconditional instruction —
+    # every scene got the same anime girl inserted, even "con gà" (chicken),
+    # which has no person in it at all. Style wording must describe
+    # rendering technique only, never mandate a character existing.
+    prompt = build_scene_prompt("a brown hen standing in a farmyard")
+    assert "character design" not in prompt
+    assert "where a person is shown" not in prompt
 
 
 def test_build_avatar_prompt_excludes_speaker_name_and_includes_no_text_request():
