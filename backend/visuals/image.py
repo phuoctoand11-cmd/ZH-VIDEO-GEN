@@ -3,6 +3,7 @@ import hashlib
 import io
 import logging
 import os
+import time
 from pathlib import Path
 
 import requests
@@ -22,6 +23,13 @@ DEFAULT_STEPS = 30
 # A retry after a failed attempt still needs enough steps to converge to
 # something coherent, just cheaper than the first attempt.
 RETRY_STEPS = 15
+# Verified on production (real traceback via Cloud Run logs, not guessed):
+# generating 5 sequential images per video with zero delay between requests
+# trips Cloudflare's per-account rate limit (429 Too Many Requests) after
+# enough back-to-back videos. The old retry fired ~99ms after the first
+# failure — guaranteed to hit the same rate limit again. This backoff only
+# applies on a 429 specifically, not on other failure types.
+RATE_LIMIT_BACKOFF_SECONDS = 8
 
 # Small local pastel palette for the text-free placeholder image (see
 # make_placeholder_image below). Deliberately not imported from render.theme
@@ -133,11 +141,18 @@ def generate_image(
             )
             image.save(cache_path)
             return str(cache_path)
-        except Exception:  # noqa: BLE001 - fall back to a placeholder below
+        except Exception as exc:  # noqa: BLE001 - fall back to a placeholder below
             # Previously silent, which made every real failure indistinguishable
             # from a normal fallback in production — this is the only signal
             # that reaches Cloud Run logs when generation fails.
             logger.exception("generate_image attempt %d failed for prompt: %s", attempt, prompt)
+            is_rate_limited = (
+                isinstance(exc, requests.exceptions.HTTPError)
+                and exc.response is not None
+                and exc.response.status_code == 429
+            )
+            if is_rate_limited and attempt < max_retries:
+                time.sleep(RATE_LIMIT_BACKOFF_SECONDS)
             width, height, steps = width // 2, height // 2, RETRY_STEPS
 
     placeholder = make_placeholder_image(prompt[:40], size=size)

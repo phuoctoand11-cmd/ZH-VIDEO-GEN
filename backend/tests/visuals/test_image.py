@@ -2,6 +2,7 @@ import base64
 import io
 from pathlib import Path
 
+import requests
 from PIL import Image
 import visuals.image as image_module
 
@@ -49,6 +50,45 @@ def test_generate_image_retries_with_reduced_but_nonzero_steps(tmp_path, monkeyp
 
     assert attempts == [image_module.DEFAULT_STEPS, image_module.RETRY_STEPS]
     assert image_module.RETRY_STEPS > 2
+
+
+def _http_429_error():
+    response = requests.Response()
+    response.status_code = 429
+    return requests.exceptions.HTTPError(response=response)
+
+
+def test_generate_image_backs_off_before_retrying_after_rate_limit(tmp_path, monkeypatch):
+    attempts = []
+    sleeps = []
+
+    def flaky_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
+        attempts.append(steps)
+        if len(attempts) == 1:
+            raise _http_429_error()
+        return Image.new("RGB", (width, height), color=(1, 2, 3))
+
+    monkeypatch.setattr(image_module, "_generate", flaky_generate)
+    monkeypatch.setattr(image_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    image_module.generate_image("a cat", str(tmp_path), max_retries=1)
+
+    assert len(attempts) == 2
+    assert sleeps == [image_module.RATE_LIMIT_BACKOFF_SECONDS]
+
+
+def test_generate_image_does_not_sleep_on_non_rate_limit_failure(tmp_path, monkeypatch):
+    sleeps = []
+
+    def flaky_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
+        raise RuntimeError("some other error")
+
+    monkeypatch.setattr(image_module, "_generate", flaky_generate)
+    monkeypatch.setattr(image_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    image_module.generate_image("a cat", str(tmp_path), max_retries=1)
+
+    assert sleeps == []
 
 
 def test_generate_image_falls_back_to_placeholder(tmp_path, monkeypatch):
