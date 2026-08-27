@@ -33,25 +33,29 @@ SCENE_NEGATIVE_PROMPT = (
 def build_scene_prompt(icon_prompt: str) -> str:
     # History of this prompt (each change verified on production, not
     # guessed): "children's-book illustration" biased FLUX toward generic
-    # kid-in-nature scenes with storybook captions. Reusing the
-    # flat-vector/kawaii framing fixed that, but Cloudflare phoenix-1.0 then
-    # padded scenes with unrelated decorative filler (plants, hearts) even
-    # with icon_prompt first for strongest weight — fixed by the explicit
-    # "nothing else in the frame" constraint below. That in turn revealed
-    # the current bug: this prompt used to say "chibi-style character design
-    # where a person is shown", intending it as conditional, but the model
-    # read it as an instruction to always add a character — every scene got
-    # the same anime girl, even for "con gà" (chicken), which has no person
-    # in it. Style words now describe rendering technique only (how to draw
-    # whatever the subject is), never content (what to draw).
+    # kid-in-nature scenes with storybook captions. The flat-vector/kawaii
+    # framing fixed that, but Cloudflare phoenix-1.0 then padded scenes with
+    # unrelated decorative filler (plants, hearts) even with icon_prompt
+    # first for strongest weight — fixed by the explicit "nothing else in
+    # the frame" constraint below. That in turn revealed a mandated-character
+    # bug (fixed separately) and, once both were gone, a subtler failure:
+    # every scene rendered as the same round-faced cat mascot regardless of
+    # icon_prompt — including "con gà" (chicken). "Kawaii" is a strong
+    # stylistic anchor whose dominant training association is cat-style
+    # mascots (stickers, emoji), which was outweighing the actual subject —
+    # dropped in favor of style words with no species association of their
+    # own. icon_prompt is also now repeated and stated as a strict
+    # recognizability requirement, since repetition is a plain way to
+    # increase a concept's weight in the prompt.
     return (
-        f"{icon_prompt}. Depict only the exact subject described above — no "
-        f"additional characters, people, animals, plants, or props unless "
-        f"they are explicitly part of that description. Flat-vector kawaii "
-        f"illustration style, soft shading, bright warm colors, thick clean "
-        f"outlines, plain simple background, landscape orientation, no text, "
-        f"no letters, no words, no numbers, no captions, no watermark, no "
-        f"logos, no signage."
+        f"{icon_prompt}. The subject must be immediately and unmistakably "
+        f"recognizable as exactly this: {icon_prompt}. Depict only the exact "
+        f"subject described above — no additional characters, people, "
+        f"animals, plants, or props unless they are explicitly part of that "
+        f"description. Flat-vector illustration style, soft shading, bright "
+        f"warm colors, thick clean outlines, plain simple background, "
+        f"landscape orientation, no text, no letters, no words, no numbers, "
+        f"no captions, no watermark, no logos, no signage."
     )
 
 

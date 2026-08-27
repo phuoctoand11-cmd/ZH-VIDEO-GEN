@@ -22,6 +22,18 @@ def test_build_scene_prompt_never_mandates_a_character():
     assert "where a person is shown" not in prompt
 
 
+def test_build_scene_prompt_excludes_kawaii_and_repeats_subject():
+    # Regression test: with the character-mandate and decorative-filler bugs
+    # fixed, production testing ("con gà") showed every scene still rendered
+    # as the same round-faced cat mascot regardless of icon_prompt — "kawaii"
+    # is a strong stylistic anchor whose dominant training association is
+    # cat-style mascots, which was outweighing the actual subject. icon_prompt
+    # is now repeated to increase its weight instead.
+    prompt = build_scene_prompt("a brown hen standing in a farmyard")
+    assert "kawaii" not in prompt.lower()
+    assert prompt.count("a brown hen standing in a farmyard") == 2
+
+
 def test_build_avatar_prompt_excludes_speaker_name_and_includes_no_text_request():
     prompt = build_avatar_prompt("Minh")
     assert "Minh" not in prompt
