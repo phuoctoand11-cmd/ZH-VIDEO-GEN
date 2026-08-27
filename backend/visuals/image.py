@@ -1,35 +1,23 @@
-import base64
 import hashlib
-import io
 import logging
-import os
-import time
+import threading
 from pathlib import Path
 
-import requests
+import torch
+from diffusers import AutoPipelineForText2Image, LCMScheduler
 from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = "@cf/leonardo/phoenix-1.0"
-API_BASE = "https://api.cloudflare.com/client/v4/accounts"
-# Phoenix's guidance range is 2-10 (Cloudflare's own default is 2, the low
-# end). Verified on production at guidance=8: scenes still drifted toward
-# generic decorative filler unrelated to the prompt (see SCENE_NEGATIVE_PROMPT
-# in prompt_builder.py) — pushed to the max since context accuracy matters
-# more here than generation variety or compositional smoothness.
-DEFAULT_GUIDANCE = 10
-DEFAULT_STEPS = 30
-# A retry after a failed attempt still needs enough steps to converge to
-# something coherent, just cheaper than the first attempt.
-RETRY_STEPS = 15
-# Verified on production (real traceback via Cloud Run logs, not guessed):
-# generating 5 sequential images per video with zero delay between requests
-# trips Cloudflare's per-account rate limit (429 Too Many Requests) after
-# enough back-to-back videos. The old retry fired ~99ms after the first
-# failure — guaranteed to hit the same rate limit again. This backoff only
-# applies on a 429 specifically, not on other failure types.
-RATE_LIMIT_BACKOFF_SECONDS = 8
+MODEL_ID = "runwayml/stable-diffusion-v1-5"
+LORA_ID = "latent-consistency/lcm-lora-sdv1-5"
+# LCM-LoRA is distilled assuming near-unity classifier-free guidance — the
+# high guidance values that helped prompt adherence on hosted APIs (FLUX.1-dev
+# at 3.5, Cloudflare phoenix-1.0 at 10) actively degrade output here instead.
+# 4 steps / guidance 1.0 are the settings documented in the LCM-LoRA release,
+# not values tuned by trial here (this pipeline can't be exercised locally).
+DEFAULT_STEPS = 4
+DEFAULT_GUIDANCE = 1.0
 
 # Small local pastel palette for the text-free placeholder image (see
 # make_placeholder_image below). Deliberately not imported from render.theme
@@ -40,15 +28,23 @@ _PLACEHOLDER_PALETTE = [
     (183, 235, 183),  # pastel green
     (255, 218, 170),  # pastel orange
 ]
-REQUEST_TIMEOUT_SECONDS = 60
+
+_pipeline = None
+_pipeline_lock = threading.Lock()
 
 
-def _get_credentials() -> tuple[str, str]:
-    account_id = os.environ.get("CF_ACCOUNT_ID")
-    token = os.environ.get("CF_API_TOKEN")
-    if not account_id or not token:
-        raise RuntimeError("CF_ACCOUNT_ID and CF_API_TOKEN environment variables must be set")
-    return account_id, token
+def _get_pipeline():
+    global _pipeline
+    if _pipeline is None:
+        with _pipeline_lock:
+            if _pipeline is None:  # re-check: another thread may have built it first
+                pipe = AutoPipelineForText2Image.from_pretrained(
+                    MODEL_ID, torch_dtype=torch.float32, safety_checker=None
+                )
+                pipe.load_lora_weights(LORA_ID)
+                pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
+                _pipeline = pipe
+    return _pipeline
 
 
 def _generate(
@@ -59,39 +55,21 @@ def _generate(
     guidance: float = DEFAULT_GUIDANCE,
     negative_prompt: str | None = None,
 ) -> Image.Image:
-    account_id, token = _get_credentials()
-    url = f"{API_BASE}/{account_id}/ai/run/{MODEL_ID}"
-    payload = {
-        "prompt": prompt,
-        "width": width,
-        "height": height,
-        "num_steps": steps,
-        "guidance": guidance,
-    }
-    if negative_prompt:
-        payload["negative_prompt"] = negative_prompt
-
-    response = requests.post(
-        url,
-        headers={"Authorization": f"Bearer {token}"},
-        json=payload,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
-
-    # Cloudflare's documented response shape differs per model (some return
-    # raw image bytes, some wrap a base64 string in a JSON envelope) and this
-    # model's docs don't specify which — handle both rather than guess wrong.
-    content_type = response.headers.get("content-type", "")
-    if "application/json" in content_type:
-        data = response.json()
-        if not data.get("success", True):
-            raise RuntimeError(f"Cloudflare Workers AI error: {data.get('errors')}")
-        image_bytes = base64.b64decode(data["result"]["image"])
-    else:
-        image_bytes = response.content
-
-    return Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    pipe = _get_pipeline()
+    # diffusers pipelines are not documented as safe for concurrent __call__
+    # from multiple threads sharing one instance, and Gradio can process more
+    # than one request at a time — serialize inference explicitly rather than
+    # risk silently corrupted output under real concurrency.
+    with _pipeline_lock:
+        result = pipe(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            num_inference_steps=steps,
+            guidance_scale=guidance,
+        )
+    return result.images[0]
 
 
 def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Image.Image:
@@ -133,27 +111,23 @@ def generate_image(
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
     width, height = size
-    steps = DEFAULT_STEPS
     for attempt in range(max_retries + 1):
         try:
             image = _generate(
-                prompt, width=width, height=height, steps=steps, negative_prompt=negative_prompt
+                prompt, width=width, height=height, negative_prompt=negative_prompt
             )
             image.save(cache_path)
             return str(cache_path)
-        except Exception as exc:  # noqa: BLE001 - fall back to a placeholder below
-            # Previously silent, which made every real failure indistinguishable
-            # from a normal fallback in production — this is the only signal
-            # that reaches Cloud Run logs when generation fails.
+        except Exception:  # noqa: BLE001 - fall back to a placeholder below
+            # Previously silent on the Cloudflare path too, which made every
+            # real failure indistinguishable from a normal fallback in
+            # production — this is the only signal that reaches Cloud Run
+            # logs when local generation fails (e.g. out of memory).
             logger.exception("generate_image attempt %d failed for prompt: %s", attempt, prompt)
-            is_rate_limited = (
-                isinstance(exc, requests.exceptions.HTTPError)
-                and exc.response is not None
-                and exc.response.status_code == 429
-            )
-            if is_rate_limited and attempt < max_retries:
-                time.sleep(RATE_LIMIT_BACKOFF_SECONDS)
-            width, height, steps = width // 2, height // 2, RETRY_STEPS
+            # LCM already runs at its minimum useful step count (4), so the
+            # retry lever here is resolution (halved, still a multiple of 8
+            # for the VAE) rather than steps.
+            width, height = width // 2, height // 2
 
     placeholder = make_placeholder_image(prompt[:40], size=size)
     placeholder.save(cache_path)

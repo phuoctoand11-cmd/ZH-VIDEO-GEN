@@ -1,8 +1,5 @@
-import base64
-import io
 from pathlib import Path
 
-import requests
 from PIL import Image
 import visuals.image as image_module
 
@@ -10,7 +7,7 @@ import visuals.image as image_module
 def test_generate_image_uses_cache(tmp_path, monkeypatch):
     calls = {"count": 0}
 
-    def fake_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
+    def fake_generate(prompt, width=768, height=768, negative_prompt=None):
         calls["count"] += 1
         return Image.new("RGB", (width, height), color=(1, 2, 3))
 
@@ -21,78 +18,36 @@ def test_generate_image_uses_cache(tmp_path, monkeypatch):
     assert calls["count"] == 1
 
 
-def test_generate_image_passes_steps_and_negative_prompt_through(tmp_path, monkeypatch):
+def test_generate_image_passes_negative_prompt_through(tmp_path, monkeypatch):
     captured = {}
 
-    def fake_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
-        captured["steps"] = steps
+    def fake_generate(prompt, width=768, height=768, negative_prompt=None):
         captured["negative_prompt"] = negative_prompt
         return Image.new("RGB", (width, height), color=(1, 2, 3))
 
     monkeypatch.setattr(image_module, "_generate", fake_generate)
     image_module.generate_image("a cat", str(tmp_path), negative_prompt="blurry, text")
 
-    assert captured["steps"] == image_module.DEFAULT_STEPS
     assert captured["negative_prompt"] == "blurry, text"
 
 
-def test_generate_image_retries_with_reduced_but_nonzero_steps(tmp_path, monkeypatch):
+def test_generate_image_retries_with_halved_resolution(tmp_path, monkeypatch):
     attempts = []
 
-    def flaky_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
-        attempts.append(steps)
+    def flaky_generate(prompt, width=768, height=768, negative_prompt=None):
+        attempts.append((width, height))
         if len(attempts) == 1:
-            raise RuntimeError("timed out")
+            raise RuntimeError("out of memory")
         return Image.new("RGB", (width, height), color=(1, 2, 3))
 
     monkeypatch.setattr(image_module, "_generate", flaky_generate)
-    image_module.generate_image("a cat", str(tmp_path), max_retries=1)
+    image_module.generate_image("a cat", str(tmp_path), max_retries=1, size=(768, 576))
 
-    assert attempts == [image_module.DEFAULT_STEPS, image_module.RETRY_STEPS]
-    assert image_module.RETRY_STEPS > 2
-
-
-def _http_429_error():
-    response = requests.Response()
-    response.status_code = 429
-    return requests.exceptions.HTTPError(response=response)
-
-
-def test_generate_image_backs_off_before_retrying_after_rate_limit(tmp_path, monkeypatch):
-    attempts = []
-    sleeps = []
-
-    def flaky_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
-        attempts.append(steps)
-        if len(attempts) == 1:
-            raise _http_429_error()
-        return Image.new("RGB", (width, height), color=(1, 2, 3))
-
-    monkeypatch.setattr(image_module, "_generate", flaky_generate)
-    monkeypatch.setattr(image_module.time, "sleep", lambda seconds: sleeps.append(seconds))
-
-    image_module.generate_image("a cat", str(tmp_path), max_retries=1)
-
-    assert len(attempts) == 2
-    assert sleeps == [image_module.RATE_LIMIT_BACKOFF_SECONDS]
-
-
-def test_generate_image_does_not_sleep_on_non_rate_limit_failure(tmp_path, monkeypatch):
-    sleeps = []
-
-    def flaky_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
-        raise RuntimeError("some other error")
-
-    monkeypatch.setattr(image_module, "_generate", flaky_generate)
-    monkeypatch.setattr(image_module.time, "sleep", lambda seconds: sleeps.append(seconds))
-
-    image_module.generate_image("a cat", str(tmp_path), max_retries=1)
-
-    assert sleeps == []
+    assert attempts == [(768, 576), (384, 288)]
 
 
 def test_generate_image_falls_back_to_placeholder(tmp_path, monkeypatch):
-    def always_fail(prompt, width=768, height=768, steps=None, negative_prompt=None):
+    def always_fail(prompt, width=768, height=768, negative_prompt=None):
         raise RuntimeError("out of memory")
 
     monkeypatch.setattr(image_module, "_generate", always_fail)
@@ -130,102 +85,72 @@ def test_make_placeholder_image_draws_no_text_and_varies_color_by_prompt():
     assert repeat == center_a
 
 
-def _png_bytes(size=(4, 4), color=(10, 20, 30)):
-    buf = io.BytesIO()
-    Image.new("RGB", size, color=color).save(buf, format="PNG")
-    return buf.getvalue()
-
-
-class _FakeResponse:
-    def __init__(self, headers, json_data=None, content=b""):
-        self.headers = headers
-        self._json_data = json_data
-        self.content = content
-
-    def raise_for_status(self):
-        pass
-
-    def json(self):
-        return self._json_data
-
-
-def test_get_credentials_reads_account_id_and_token_from_env(monkeypatch):
-    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
-    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
-
-    assert image_module._get_credentials() == ("acct123", "cf_fake_token")
-
-
-def test_get_credentials_raises_clear_error_when_missing(monkeypatch):
-    monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
-    monkeypatch.delenv("CF_API_TOKEN", raising=False)
-
-    try:
-        image_module._get_credentials()
-        assert False, "expected RuntimeError"
-    except RuntimeError as exc:
-        assert "CF_ACCOUNT_ID" in str(exc)
-        assert "CF_API_TOKEN" in str(exc)
-
-
-def test_generate_posts_expected_payload_and_parses_json_envelope(monkeypatch):
-    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
-    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
+def test_get_pipeline_builds_once_and_caches(monkeypatch):
+    monkeypatch.setattr(image_module, "_pipeline", None)
 
     calls = []
-    image_b64 = base64.b64encode(_png_bytes()).decode()
 
-    def fake_post(url, headers=None, json=None, timeout=None):
-        calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
-        return _FakeResponse(
-            headers={"content-type": "application/json"},
-            json_data={"success": True, "result": {"image": image_b64}},
-        )
+    class FakeScheduler:
+        config = object()
 
-    monkeypatch.setattr(image_module.requests, "post", fake_post)
+        @classmethod
+        def from_config(cls, config):
+            return cls()
+
+    class FakePipeline:
+        def __init__(self):
+            self.scheduler = "original-scheduler"
+            self.loaded_loras = []
+
+        def load_lora_weights(self, lora_id):
+            self.loaded_loras.append(lora_id)
+
+    fake_pipeline = FakePipeline()
+
+    class FakeAutoPipeline:
+        @staticmethod
+        def from_pretrained(model_id, torch_dtype=None, safety_checker=None):
+            calls.append({"model_id": model_id, "safety_checker": safety_checker})
+            return fake_pipeline
+
+    monkeypatch.setattr(image_module, "AutoPipelineForText2Image", FakeAutoPipeline)
+    monkeypatch.setattr(image_module, "LCMScheduler", FakeScheduler)
+
+    pipe = image_module._get_pipeline()
+
+    assert pipe is fake_pipeline
+    assert calls == [{"model_id": image_module.MODEL_ID, "safety_checker": None}]
+    assert fake_pipeline.loaded_loras == [image_module.LORA_ID]
+    assert isinstance(pipe.scheduler, FakeScheduler)
+
+    # A second call must reuse the cached pipeline, not rebuild it.
+    image_module._get_pipeline()
+    assert len(calls) == 1
+
+
+def test_generate_calls_pipeline_with_expected_kwargs(monkeypatch):
+    monkeypatch.setattr(image_module, "_pipeline", None)
+
+    captured = {}
+
+    class FakeResult:
+        images = [Image.new("RGB", (100, 100))]
+
+    class FakePipeline:
+        def __call__(self, **kwargs):
+            captured.update(kwargs)
+            return FakeResult()
+
+    monkeypatch.setattr(image_module, "_get_pipeline", lambda: FakePipeline())
 
     image = image_module._generate("a cat", width=100, height=100, negative_prompt="blurry")
 
-    assert len(calls) == 1
-    call = calls[0]
-    assert call["url"] == f"{image_module.API_BASE}/acct123/ai/run/{image_module.MODEL_ID}"
-    assert call["headers"] == {"Authorization": "Bearer cf_fake_token"}
-    assert call["json"] == {
+    assert captured == {
         "prompt": "a cat",
+        "negative_prompt": "blurry",
         "width": 100,
         "height": 100,
-        "num_steps": image_module.DEFAULT_STEPS,
-        "guidance": image_module.DEFAULT_GUIDANCE,
-        "negative_prompt": "blurry",
+        "num_inference_steps": image_module.DEFAULT_STEPS,
+        "guidance_scale": image_module.DEFAULT_GUIDANCE,
     }
-    assert image.size == (4, 4)
-
-
-def test_generate_handles_raw_binary_response(monkeypatch):
-    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
-    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
-
-    def fake_post(url, headers=None, json=None, timeout=None):
-        return _FakeResponse(headers={"content-type": "image/png"}, content=_png_bytes())
-
-    monkeypatch.setattr(image_module.requests, "post", fake_post)
-
-    image = image_module._generate("a cat", width=100, height=100)
-    assert image.size == (4, 4)
-
-
-def test_generate_omits_negative_prompt_key_when_not_given(monkeypatch):
-    monkeypatch.setenv("CF_ACCOUNT_ID", "acct123")
-    monkeypatch.setenv("CF_API_TOKEN", "cf_fake_token")
-
-    calls = []
-
-    def fake_post(url, headers=None, json=None, timeout=None):
-        calls.append(json)
-        return _FakeResponse(headers={"content-type": "image/png"}, content=_png_bytes())
-
-    monkeypatch.setattr(image_module.requests, "post", fake_post)
-
-    image_module._generate("a cat", width=100, height=100)
-
-    assert "negative_prompt" not in calls[0]
+    assert image.size == (100, 100)
