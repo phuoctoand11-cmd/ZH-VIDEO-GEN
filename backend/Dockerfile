@@ -8,21 +8,8 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# CPU-only torch build first — the default PyPI wheel bundles CUDA runtimes
-# (several GB) that this service never uses, since Cloud Run here has no GPU.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Bake the scene-illustration model weights into the image at build time so a
-# cold instance never depends on a runtime download from Hugging Face — this
-# removes HF's uptime/rate limits from the request path entirely (unlike the
-# Cloudflare Workers AI call this replaces, which stayed subject to Cloudflare's
-# own limits on every single request).
-ENV HF_HOME=/app/.cache/huggingface
-COPY scripts/prefetch_model.py scripts/prefetch_model.py
-RUN python scripts/prefetch_model.py
 
 COPY . .
 

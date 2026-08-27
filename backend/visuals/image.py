@@ -1,23 +1,20 @@
 import hashlib
 import logging
-import threading
+import os
 from pathlib import Path
 
-import torch
-from diffusers import AutoPipelineForText2Image, LCMScheduler
+from gradio_client import Client
 from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = "runwayml/stable-diffusion-v1-5"
-LORA_ID = "latent-consistency/lcm-lora-sdv1-5"
-# LCM-LoRA is distilled assuming near-unity classifier-free guidance — the
-# high guidance values that helped prompt adherence on hosted APIs (FLUX.1-dev
-# at 3.5, Cloudflare phoenix-1.0 at 10) actively degrade output here instead.
-# 4 steps / guidance 1.0 are the settings documented in the LCM-LoRA release,
-# not values tuned by trial here (this pipeline can't be exercised locally).
-DEFAULT_STEPS = 4
-DEFAULT_GUIDANCE = 1.0
+# A separate Hugging Face Space (hf-space-image-gen/ in this repo) running
+# FLUX.1-schnell on ZeroGPU — inference happens on HF's real GPU allocation,
+# not in this container, so this service never needs torch/diffusers itself.
+# Set to the actual deployed Space's owner/name (e.g. "username/space-name").
+SPACE_ID = os.environ.get("IMAGE_SPACE_ID", "")
+DEFAULT_WIDTH = 768
+DEFAULT_HEIGHT = 576
 
 # Small local pastel palette for the text-free placeholder image (see
 # make_placeholder_image below). Deliberately not imported from render.theme
@@ -29,47 +26,39 @@ _PLACEHOLDER_PALETTE = [
     (255, 218, 170),  # pastel orange
 ]
 
-_pipeline = None
-_pipeline_lock = threading.Lock()
+_client = None
 
 
-def _get_pipeline():
-    global _pipeline
-    if _pipeline is None:
-        with _pipeline_lock:
-            if _pipeline is None:  # re-check: another thread may have built it first
-                pipe = AutoPipelineForText2Image.from_pretrained(
-                    MODEL_ID, torch_dtype=torch.float32, safety_checker=None
-                )
-                pipe.load_lora_weights(LORA_ID)
-                pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
-                _pipeline = pipe
-    return _pipeline
+def _get_client() -> Client:
+    global _client
+    if _client is None:
+        token = os.environ.get("HF_TOKEN")
+        if not token:
+            raise RuntimeError("HF_TOKEN environment variable is not set")
+        if not SPACE_ID:
+            raise RuntimeError("IMAGE_SPACE_ID environment variable is not set")
+        # Passing hf_token authenticates the call so it draws from this
+        # account's own ZeroGPU daily quota (5 min/day on a free account)
+        # instead of the much stricter shared pool used for unauthenticated
+        # requests (2 min/day, shared across every visitor to the Space).
+        _client = Client(SPACE_ID, hf_token=token)
+    return _client
 
 
 def _generate(
     prompt: str,
-    width: int = 768,
-    height: int = 768,
-    steps: int = DEFAULT_STEPS,
-    guidance: float = DEFAULT_GUIDANCE,
+    width: int = DEFAULT_WIDTH,
+    height: int = DEFAULT_HEIGHT,
     negative_prompt: str | None = None,
 ) -> Image.Image:
-    pipe = _get_pipeline()
-    # diffusers pipelines are not documented as safe for concurrent __call__
-    # from multiple threads sharing one instance, and Gradio can process more
-    # than one request at a time — serialize inference explicitly rather than
-    # risk silently corrupted output under real concurrency.
-    with _pipeline_lock:
-        result = pipe(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=width,
-            height=height,
-            num_inference_steps=steps,
-            guidance_scale=guidance,
-        )
-    return result.images[0]
+    # negative_prompt is accepted for interface symmetry with the rest of the
+    # pipeline but not forwarded: the Space runs FLUX.1-schnell at
+    # guidance_scale=0 (required — schnell is guidance-distilled), and
+    # negative_prompt has no effect without classifier-free guidance.
+    del negative_prompt
+    client = _get_client()
+    result_path = client.predict(prompt, width, height, api_name="/generate")
+    return Image.open(result_path).convert("RGB")
 
 
 def make_placeholder_image(text: str, size: tuple[int, int] = (768, 768)) -> Image.Image:
@@ -119,14 +108,7 @@ def generate_image(
             image.save(cache_path)
             return str(cache_path)
         except Exception:  # noqa: BLE001 - fall back to a placeholder below
-            # Previously silent on the Cloudflare path too, which made every
-            # real failure indistinguishable from a normal fallback in
-            # production — this is the only signal that reaches Cloud Run
-            # logs when local generation fails (e.g. out of memory).
             logger.exception("generate_image attempt %d failed for prompt: %s", attempt, prompt)
-            # LCM already runs at its minimum useful step count (4), so the
-            # retry lever here is resolution (halved, still a multiple of 8
-            # for the VAE) rather than steps.
             width, height = width // 2, height // 2
 
     placeholder = make_placeholder_image(prompt[:40], size=size)

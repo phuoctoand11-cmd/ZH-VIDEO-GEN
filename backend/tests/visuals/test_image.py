@@ -7,7 +7,7 @@ import visuals.image as image_module
 def test_generate_image_uses_cache(tmp_path, monkeypatch):
     calls = {"count": 0}
 
-    def fake_generate(prompt, width=768, height=768, negative_prompt=None):
+    def fake_generate(prompt, width=768, height=576, negative_prompt=None):
         calls["count"] += 1
         return Image.new("RGB", (width, height), color=(1, 2, 3))
 
@@ -18,26 +18,13 @@ def test_generate_image_uses_cache(tmp_path, monkeypatch):
     assert calls["count"] == 1
 
 
-def test_generate_image_passes_negative_prompt_through(tmp_path, monkeypatch):
-    captured = {}
-
-    def fake_generate(prompt, width=768, height=768, negative_prompt=None):
-        captured["negative_prompt"] = negative_prompt
-        return Image.new("RGB", (width, height), color=(1, 2, 3))
-
-    monkeypatch.setattr(image_module, "_generate", fake_generate)
-    image_module.generate_image("a cat", str(tmp_path), negative_prompt="blurry, text")
-
-    assert captured["negative_prompt"] == "blurry, text"
-
-
 def test_generate_image_retries_with_halved_resolution(tmp_path, monkeypatch):
     attempts = []
 
-    def flaky_generate(prompt, width=768, height=768, negative_prompt=None):
+    def flaky_generate(prompt, width=768, height=576, negative_prompt=None):
         attempts.append((width, height))
         if len(attempts) == 1:
-            raise RuntimeError("out of memory")
+            raise RuntimeError("space unavailable")
         return Image.new("RGB", (width, height), color=(1, 2, 3))
 
     monkeypatch.setattr(image_module, "_generate", flaky_generate)
@@ -47,8 +34,8 @@ def test_generate_image_retries_with_halved_resolution(tmp_path, monkeypatch):
 
 
 def test_generate_image_falls_back_to_placeholder(tmp_path, monkeypatch):
-    def always_fail(prompt, width=768, height=768, negative_prompt=None):
-        raise RuntimeError("out of memory")
+    def always_fail(prompt, width=768, height=576, negative_prompt=None):
+        raise RuntimeError("space unavailable")
 
     monkeypatch.setattr(image_module, "_generate", always_fail)
     path = image_module.generate_image("a dog", str(tmp_path), max_retries=1)
@@ -85,72 +72,67 @@ def test_make_placeholder_image_draws_no_text_and_varies_color_by_prompt():
     assert repeat == center_a
 
 
-def test_get_pipeline_builds_once_and_caches(monkeypatch):
-    monkeypatch.setattr(image_module, "_pipeline", None)
+def test_get_client_builds_client_with_space_id_and_token(monkeypatch):
+    monkeypatch.setattr(image_module, "_client", None)
+    monkeypatch.setattr(image_module, "SPACE_ID", "someuser/some-space")
+    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
 
     calls = []
 
-    class FakeScheduler:
-        config = object()
+    class FakeClient:
+        def __init__(self, space_id, hf_token=None):
+            calls.append({"space_id": space_id, "hf_token": hf_token})
 
-        @classmethod
-        def from_config(cls, config):
-            return cls()
+    monkeypatch.setattr(image_module, "Client", FakeClient)
 
-    class FakePipeline:
-        def __init__(self):
-            self.scheduler = "original-scheduler"
-            self.loaded_loras = []
+    client = image_module._get_client()
 
-        def load_lora_weights(self, lora_id):
-            self.loaded_loras.append(lora_id)
+    assert calls == [{"space_id": "someuser/some-space", "hf_token": "hf_fake_token"}]
+    assert isinstance(client, FakeClient)
 
-    fake_pipeline = FakePipeline()
-
-    class FakeAutoPipeline:
-        @staticmethod
-        def from_pretrained(model_id, torch_dtype=None, safety_checker=None):
-            calls.append({"model_id": model_id, "safety_checker": safety_checker})
-            return fake_pipeline
-
-    monkeypatch.setattr(image_module, "AutoPipelineForText2Image", FakeAutoPipeline)
-    monkeypatch.setattr(image_module, "LCMScheduler", FakeScheduler)
-
-    pipe = image_module._get_pipeline()
-
-    assert pipe is fake_pipeline
-    assert calls == [{"model_id": image_module.MODEL_ID, "safety_checker": None}]
-    assert fake_pipeline.loaded_loras == [image_module.LORA_ID]
-    assert isinstance(pipe.scheduler, FakeScheduler)
-
-    # A second call must reuse the cached pipeline, not rebuild it.
-    image_module._get_pipeline()
+    # A second call must reuse the cached client, not construct a new one.
+    image_module._get_client()
     assert len(calls) == 1
 
 
-def test_generate_calls_pipeline_with_expected_kwargs(monkeypatch):
-    monkeypatch.setattr(image_module, "_pipeline", None)
+def test_get_client_raises_clear_error_without_hf_token(monkeypatch):
+    monkeypatch.setattr(image_module, "_client", None)
+    monkeypatch.setattr(image_module, "SPACE_ID", "someuser/some-space")
+    monkeypatch.delenv("HF_TOKEN", raising=False)
 
-    captured = {}
+    try:
+        image_module._get_client()
+        assert False, "expected RuntimeError"
+    except RuntimeError as exc:
+        assert "HF_TOKEN" in str(exc)
 
-    class FakeResult:
-        images = [Image.new("RGB", (100, 100))]
 
-    class FakePipeline:
-        def __call__(self, **kwargs):
-            captured.update(kwargs)
-            return FakeResult()
+def test_get_client_raises_clear_error_without_space_id(monkeypatch):
+    monkeypatch.setattr(image_module, "_client", None)
+    monkeypatch.setattr(image_module, "SPACE_ID", "")
+    monkeypatch.setenv("HF_TOKEN", "hf_fake_token")
 
-    monkeypatch.setattr(image_module, "_get_pipeline", lambda: FakePipeline())
+    try:
+        image_module._get_client()
+        assert False, "expected RuntimeError"
+    except RuntimeError as exc:
+        assert "IMAGE_SPACE_ID" in str(exc)
 
-    image = image_module._generate("a cat", width=100, height=100, negative_prompt="blurry")
 
-    assert captured == {
-        "prompt": "a cat",
-        "negative_prompt": "blurry",
-        "width": 100,
-        "height": 100,
-        "num_inference_steps": image_module.DEFAULT_STEPS,
-        "guidance_scale": image_module.DEFAULT_GUIDANCE,
-    }
-    assert image.size == (100, 100)
+def test_generate_calls_predict_with_expected_args_and_opens_result(tmp_path, monkeypatch):
+    img_path = tmp_path / "result.png"
+    Image.new("RGB", (100, 50), color=(9, 9, 9)).save(img_path)
+
+    calls = []
+
+    class FakeClient:
+        def predict(self, *args, api_name=None):
+            calls.append({"args": args, "api_name": api_name})
+            return str(img_path)
+
+    monkeypatch.setattr(image_module, "_get_client", lambda: FakeClient())
+
+    image = image_module._generate("a cat", width=100, height=50, negative_prompt="blurry")
+
+    assert calls == [{"args": ("a cat", 100, 50), "api_name": "/generate"}]
+    assert image.size == (100, 50)
