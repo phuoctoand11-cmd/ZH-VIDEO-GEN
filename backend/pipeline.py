@@ -15,6 +15,7 @@ from render.dialogue_card import draw_dialogue_turn
 from render.vocab_card import draw_vocab_card
 from visuals.image import generate_image
 from visuals.prompt_builder import SCENE_NEGATIVE_PROMPT, build_avatar_prompt, build_scene_prompt
+from visuals.scene_library import find_cached_image, store_generated_image
 
 SCENE_IMAGE_SIZE = (768, 576)
 
@@ -55,15 +56,25 @@ def run_vocab_card_pipeline(
         items=items,
     )
 
-    image_paths = [
-        generate_image(
-            build_scene_prompt(item.icon_prompt),
-            cache_dir=f"{work_dir}/scenes",
-            size=SCENE_IMAGE_SIZE,
-            negative_prompt=SCENE_NEGATIVE_PROMPT,
+    image_paths = []
+    for item in items:
+        cached_path = find_cached_image(item.hanzi, cache_dir=f"{work_dir}/scenes")
+        if cached_path is not None:
+            image_paths.append(cached_path)
+            continue
+
+        def _remember(path: str, item=item) -> None:
+            store_generated_image(item.hanzi, item.pinyin, item.meaning_vi, item.icon_prompt, path)
+
+        image_paths.append(
+            generate_image(
+                build_scene_prompt(item.icon_prompt),
+                cache_dir=f"{work_dir}/scenes",
+                size=SCENE_IMAGE_SIZE,
+                negative_prompt=SCENE_NEGATIVE_PROMPT,
+                on_success=_remember,
+            )
         )
-        for item in items
-    ]
 
     all_audio_paths: list[str] = []
     for index, item in enumerate(items):

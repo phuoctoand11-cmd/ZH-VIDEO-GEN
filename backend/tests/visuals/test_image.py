@@ -52,6 +52,32 @@ def test_generate_image_retries_with_reduced_but_nonzero_steps(tmp_path, monkeyp
     assert image_module.RETRY_STEPS > 2
 
 
+def test_generate_image_calls_on_success_with_cache_path(tmp_path, monkeypatch):
+    def fake_generate(prompt, width=768, height=768, steps=None, negative_prompt=None):
+        return Image.new("RGB", (width, height), color=(1, 2, 3))
+
+    monkeypatch.setattr(image_module, "_generate", fake_generate)
+
+    calls = []
+    path = image_module.generate_image("a cat", str(tmp_path), on_success=calls.append)
+
+    assert calls == [path]
+
+
+def test_generate_image_does_not_call_on_success_for_placeholder_fallback(tmp_path, monkeypatch):
+    def always_fail(prompt, width=768, height=768, steps=None, negative_prompt=None):
+        raise RuntimeError("out of memory")
+
+    monkeypatch.setattr(image_module, "_generate", always_fail)
+
+    calls = []
+    image_module.generate_image("a dog", str(tmp_path), max_retries=1, on_success=calls.append)
+
+    # The scene-image library must never be poisoned with a blank placeholder
+    # stored as if it were a real illustration.
+    assert calls == []
+
+
 def _http_429_error():
     response = requests.Response()
     response.status_code = 429

@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import Callable
 
 import requests
 from PIL import Image, ImageDraw
@@ -126,6 +127,7 @@ def generate_image(
     max_retries: int = 1,
     size: tuple[int, int] = (768, 768),
     negative_prompt: str | None = None,
+    on_success: Callable[[str], None] | None = None,
 ) -> str:
     cache_path = Path(cache_dir) / f"{hashlib.sha256(prompt.encode()).hexdigest()}.png"
     if cache_path.exists():
@@ -140,6 +142,12 @@ def generate_image(
                 prompt, width=width, height=height, steps=steps, negative_prompt=negative_prompt
             )
             image.save(cache_path)
+            # Only called on a genuine successful generation, never for the
+            # placeholder fallback below — callers (e.g. the scene-image
+            # library cache) rely on this to avoid ever storing a blank
+            # placeholder as if it were a real illustration.
+            if on_success is not None:
+                on_success(str(cache_path))
             return str(cache_path)
         except Exception as exc:  # noqa: BLE001 - fall back to a placeholder below
             # Previously silent, which made every real failure indistinguishable
