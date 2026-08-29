@@ -1,15 +1,25 @@
 // frontend/js/ui.js
 import { validateForm, validatePreviewRequest, TOPIC_MODES } from "./validation.js";
 import { callGenerateVideo, callGeneratePreview, describeStatusEvent } from "./api.js";
-import { summarizeResult } from "./result.js";
+import { summarizeResult, buildDownloadHref } from "./result.js";
 import { connectClient } from "./gradioClient.js";
 import { SPACE_URL } from "./config.js";
 
 const INITIAL_STATUS = "Đang tạo video... (nếu server đang ngủ, lần đầu có thể mất 1-2 phút để khởi động)";
 
-const DOWNLOAD_TARGETS = [
-  { downloadId: "download-9-16", filename: "video-9-16.mp4" },
-  { downloadId: "download-16-9", filename: "video-16-9.mp4" },
+const RESULT_TARGETS = [
+  {
+    containerId: "result-9-16",
+    videoId: "video-9-16",
+    downloadId: "download-9-16",
+    downloadName: "video-9-16.mp4",
+  },
+  {
+    containerId: "result-16-9",
+    videoId: "video-16-9",
+    downloadId: "download-16-9",
+    downloadName: "video-16-9.mp4",
+  },
 ];
 
 function readFormState(form) {
@@ -30,46 +40,15 @@ function isPlaceholderSpaceUrl(url) {
   return typeof url !== "string" || url.startsWith("REPLACE_");
 }
 
-// The `download` attribute is ignored by browsers for cross-origin resources
-// (Cloudflare Pages -> *.hf.space), so fetch the file and download the Blob.
-// If that is blocked (CORS, offline, ...), fall back to opening the video.
-async function downloadVideo(doc, url, filename) {
-  // Take the browser globals from the document's own window rather than the
-  // ambient ones, so the object URL belongs to the same document as the anchor.
-  const view = doc.defaultView;
-  try {
-    const response = await view.fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const blob = await response.blob();
-    const objectUrl = view.URL.createObjectURL(blob);
-    const tempLink = doc.createElement("a");
-    tempLink.href = objectUrl;
-    tempLink.download = filename;
-    tempLink.style.display = "none";
-    doc.body.appendChild(tempLink);
-    tempLink.click();
-    doc.body.removeChild(tempLink);
-    // Revoking immediately can cancel the download in some browsers.
-    view.setTimeout(() => view.URL.revokeObjectURL(objectUrl), 60000);
-  } catch {
-    view.open(url, "_blank");
-  }
-}
-
-function wireDownload(doc, { downloadId, filename }) {
-  const link = doc.getElementById(downloadId);
-  if (!link) return;
-  link.addEventListener("click", (event) => {
-    event.preventDefault();
-    const url = link.getAttribute("href");
-    if (!url) return;
-    downloadVideo(doc, url, filename);
-  });
-}
-
-function renderVideo(doc, { containerId, videoId, downloadId, url }) {
+// The download <a> points at the same-origin /dl Pages Function (see
+// functions/dl/[[path]].js), which re-serves the backend video with a
+// Content-Disposition attachment header. A plain cross-origin link to the
+// Gradio file URL would save under a name-less blob id instead.
+function renderVideo(doc, { containerId, videoId, downloadId, downloadName, url }) {
   const container = doc.getElementById(containerId);
   const video = doc.getElementById(videoId);
+  const download = doc.getElementById(downloadId);
+
   if (!url) {
     // Drop the previous source so a hidden player stops buffering/playing.
     try {
@@ -83,24 +62,24 @@ function renderVideo(doc, { containerId, videoId, downloadId, url }) {
     } catch {
       /* ignore */
     }
-    doc.getElementById(downloadId).removeAttribute("href");
+    download.removeAttribute("href");
     container.style.display = "none";
     return;
   }
+
   video.src = url;
-  doc.getElementById(downloadId).href = url;
+  download.href = buildDownloadHref(url, downloadName);
   container.style.display = "block";
 }
 
 function clearResults(doc) {
-  renderVideo(doc, { containerId: "result-9-16", videoId: "video-9-16", downloadId: "download-9-16", url: null });
-  renderVideo(doc, { containerId: "result-16-9", videoId: "video-16-9", downloadId: "download-16-9", url: null });
+  RESULT_TARGETS.forEach((target) => renderVideo(doc, { ...target, url: null }));
   doc.getElementById("log").textContent = "";
 }
 
 function renderResult(doc, result) {
-  renderVideo(doc, { containerId: "result-9-16", videoId: "video-9-16", downloadId: "download-9-16", url: result.video9x16Url });
-  renderVideo(doc, { containerId: "result-16-9", videoId: "video-16-9", downloadId: "download-16-9", url: result.video16x9Url });
+  const urls = [result.video9x16Url, result.video16x9Url];
+  RESULT_TARGETS.forEach((target, i) => renderVideo(doc, { ...target, url: urls[i] }));
   doc.getElementById("log").textContent = result.log;
 }
 
@@ -145,8 +124,6 @@ function wirePreviewButton(doc) {
 export function initApp(doc) {
   const form = doc.getElementById("generate-form");
   const submitBtn = doc.getElementById("submit-btn");
-
-  DOWNLOAD_TARGETS.forEach((target) => wireDownload(doc, target));
 
   updatePreviewButtonVisibility(doc);
   form.querySelectorAll('input[name="mode"]').forEach((radio) => {

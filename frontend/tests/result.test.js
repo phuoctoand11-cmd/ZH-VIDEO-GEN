@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseApiResult, summarizeResult } from "../js/result.js";
+import { parseApiResult, summarizeResult, buildDownloadHref } from "../js/result.js";
 
 test("parses both videos present as FileData objects", () => {
   const result = parseApiResult([{ url: "https://x/9x16.mp4" }, { url: "https://x/16x9.mp4" }, "Hoàn tất"]);
@@ -56,6 +56,21 @@ test("returns a safe default for a non-array data argument", () => {
     const result = parseApiResult(bad);
     assert.deepEqual(result, { video9x16Url: null, video16x9Url: null, log: "" });
   }
+});
+
+test("buildDownloadHref points at the same-origin /dl proxy with an encoded src", () => {
+  const videoUrl =
+    "https://zh-video-gen-backend-835496143706.europe-west1.run.app/gradio_api/file=/tmp/gradio/abc/output_9x16.mp4";
+  const href = buildDownloadHref(videoUrl, "video-9-16.mp4");
+  assert.equal(href, `/dl/video-9-16.mp4?src=${encodeURIComponent(videoUrl)}`);
+  // Round-trips back to the original URL.
+  assert.equal(new URLSearchParams(href.split("?")[1]).get("src"), videoUrl);
+});
+
+test("buildDownloadHref returns null when there is no video URL", () => {
+  assert.equal(buildDownloadHref(null, "video-9-16.mp4"), null);
+  assert.equal(buildDownloadHref("", "video-9-16.mp4"), null);
+  assert.equal(buildDownloadHref(undefined, "video-9-16.mp4"), null);
 });
 
 test("summarizeResult distinguishes real success from a silent backend failure", () => {

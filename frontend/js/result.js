@@ -20,6 +20,17 @@ function extractVideoUrl(value) {
   return isSafeUrl(url) ? url : null;
 }
 
+// Build the href for a "download" link. Instead of pointing straight at the
+// backend's cross-origin Gradio file URL (which carries no Content-Disposition,
+// so the browser saves it under a name-less blob id), point at the same-origin
+// /dl Pages Function, which proxies the file back with
+// `Content-Disposition: attachment; filename=...`. Returns null when there is
+// no video, so the caller can drop the href.
+export function buildDownloadHref(videoUrl, filename) {
+  if (typeof videoUrl !== "string" || videoUrl === "") return null;
+  return `/dl/${encodeURIComponent(filename)}?src=${encodeURIComponent(videoUrl)}`;
+}
+
 export function parseApiResult(data) {
   if (!Array.isArray(data)) {
     return { video9x16Url: null, video16x9Url: null, log: "" };

@@ -2,6 +2,10 @@
 
 Static site (no build step) that calls the zh-video-gen backend (Gradio app on Google Cloud Run) and renders the generated video.
 
+## Download proxy (`functions/dl/[[path]].js`)
+
+The backend's Gradio file URL is cross-origin and has no `Content-Disposition`, so a browser saves the video under a name-less blob id instead of `video-9-16.mp4`. The download links point at the same-origin Pages Function `/dl/<name>?src=<backend file url>`, which validates that `src` is on the configured backend origin (`SPACE_URL` in `js/config.js`), fetches it server-side, and re-serves it with `Content-Disposition: attachment; filename="<name>"`. See `tests/dl.test.js`.
+
 ## Deploy to Cloudflare Pages
 
 1. In the Cloudflare dashboard, create a new Pages project connected to this GitHub repo.
