@@ -23,3 +23,56 @@ hanzi,pinyin,meaning_vi,source_path
 大象,dàxiàng,con voi,ANIMAL/Bo_dong_vat_1/06_voi.png
 狮子,shīzi,sư tử,ANIMAL/Bo_dong_vat_1/07_su_tu.png
 猴子,hóuzi,con khỉ,ANIMAL/Bo_dong_vat_1/08_khi.png
+牛,niú,con bò,ANIMAL/Bo_dong_vat_2/01_bo.png
+猪,zhū,con heo,ANIMAL/Bo_dong_vat_2/02_heo.png
+鸡,jī,con gà,ANIMAL/Bo_dong_vat_2/03_ga.png
+小鸭,xiǎoyā,vịt con,ANIMAL/Bo_dong_vat_2/05_vit_con.png
+马,mǎ,con ngựa,ANIMAL/Bo_dong_vat_2/06_ngua.png
+饼干,bǐnggān,bánh quy,FOOD/Bo_banh_keo/01_banh_quy.png
+甜甜圈,tiántiánquān,bánh donut,FOOD/Bo_banh_keo/02_donut.png
+纸杯蛋糕,zhǐbēi dàngāo,bánh cupcake,FOOD/Bo_banh_keo/03_cupcake_nau.png
+巧克力,qiǎokèlì,sô cô la,FOOD/Bo_banh_keo/07_socola_thanh.png
+糖果,tángguǒ,kẹo,FOOD/Bo_banh_keo/08_keo.png
+棒棒糖,bàngbàngtáng,kẹo mút,FOOD/Bo_banh_keo/09_keo_mut.png
+布丁,bùdīng,bánh flan,FOOD/Bo_banh_keo/10_banh_flan_1.png
+果冻,guǒdòng,thạch rau câu,FOOD/Bo_banh_keo/11_thach_hong.png
+爆米花,bàomǐhuā,bắp rang bơ,FOOD/Bo_banh_keo/12_bap_rang_do_1.png
+薯条,shǔtiáo,khoai tây chiên,FOOD/Bo_banh_keo/16_khoai_tay_chien.png
+薯片,shǔpiàn,snack khoai tây,FOOD/Bo_banh_keo/17_snack_khoai_tay.png
+派,pài,bánh pie,FOOD/Bo_banh_keo/18_banh_pie.png
+面包,miànbāo,bánh mì,FOOD/Bo_do_an_1/01_banh_mi.png
+牛奶,niúnǎi,sữa,FOOD/Bo_do_an_1/02_sua.png
+水,shuǐ,nước,FOOD/Bo_do_an_1/03_nuoc.png
+米饭,mǐfàn,cơm,FOOD/Bo_do_an_1/04_com.png
+煎蛋,jiāndàn,trứng ốp la,FOOD/Bo_do_an_1/05_trung_op_la.png
+蛋糕,dàngāo,bánh kem,FOOD/Bo_do_an_1/06_banh_kem.png
+冰淇淋,bīngqílín,kem,FOOD/Bo_do_an_1/07_kem_oc_que.png
+橙汁,chéngzhī,nước cam,FOOD/Bo_do_an_1/08_hop_nuoc_cam.png
+面条,miàntiáo,mì,FOOD/Bo_do_an_2/01_mi.png
+披萨,pīsà,bánh pizza,FOOD/Bo_do_an_2/02_pizza.png
+汉堡,hànbǎo,bánh hamburger,FOOD/Bo_do_an_2/03_hamburger.png
+热狗,règǒu,bánh hotdog,FOOD/Bo_do_an_2/04_hotdog.png
+三明治,sānmíngzhì,bánh sandwich,FOOD/Bo_do_an_2/05_sandwich.png
+意大利面,yìdàlì miàn,mì Ý,FOOD/Bo_do_an_2/06_spaghetti.png
+炸鸡,zhájī,gà rán,FOOD/Bo_do_an_2/07_ga_ran.png
+汤,tāng,súp,FOOD/Bo_do_an_2/08_sup.png
+炒饭,chǎofàn,cơm chiên,FOOD/Bo_do_an_2/09_com_chien.png
+包子,bāozi,bánh bao,FOOD/Bo_do_an_2/10_banh_bao.png
+牛排,niúpái,bít tết,FOOD/Bo_do_an_2/11_bit_tet.png
+寿司,shòusī,sushi,FOOD/Bo_do_an_2/12_sushi.png
+松饼,sōngbǐng,bánh pancake,FOOD/Bo_do_an_sang/01_pancake.png
+麦片,màipiàn,ngũ cốc,FOOD/Bo_do_an_sang/02_ngu_coc.png
+果酱面包,guǒjiàng miànbāo,bánh mì phết mứt,FOOD/Bo_do_an_sang/03_banh_mi_mut.png
+燕麦粥,yànmài zhōu,cháo yến mạch,FOOD/Bo_do_an_sang/04_chao_yen_mach.png
+牛角面包,niújiǎo miànbāo,bánh sừng bò,FOOD/Bo_do_an_sang/05_banh_sung_bo.png
+华夫饼,huáfū bǐng,bánh waffle,FOOD/Bo_do_an_sang/06_waffle.png
+水煮蛋,shuǐzhǔdàn,trứng luộc,FOOD/Bo_do_an_sang/07_trung_trong_ly.png
+香肠,xiāngcháng,xúc xích,FOOD/Bo_do_an_sang/08_xuc_xich.png
+蜂蜜,fēngmì,mật ong,GIA VỊ/Bo_gia_vi_1/01_mat_ong.png
+草莓酱,cǎoméi jiàng,mứt dâu,GIA VỊ/Bo_gia_vi_1/02_mut_dau.png
+奶酪,nǎilào,phô mai,GIA VỊ/Bo_gia_vi_1/03_pho_mai.png
+黄油,huángyóu,bơ,GIA VỊ/Bo_gia_vi_1/04_bo.png
+盐,yán,muối,GIA VỊ/Bo_gia_vi_1/05_muoi.png
+糖,táng,đường,GIA VỊ/Bo_gia_vi_1/06_duong.png
+番茄酱,fānqié jiàng,tương cà,GIA VỊ/Bo_gia_vi_1/07_tuong_ca.png
+花生,huāshēng,đậu phộng,GIA VỊ/Bo_gia_vi_1/08_dau_phong.png
