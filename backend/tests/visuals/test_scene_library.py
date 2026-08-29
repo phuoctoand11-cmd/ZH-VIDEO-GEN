@@ -3,6 +3,20 @@ from pathlib import Path
 import visuals.scene_library as scene_library
 
 
+def test_storage_key_for_is_deterministic_ascii_png():
+    key1 = scene_library.storage_key_for("苹果")
+    key2 = scene_library.storage_key_for("苹果")
+    other = scene_library.storage_key_for("狗")
+
+    assert key1 == key2
+    assert key1 != other
+    assert key1.endswith(".png")
+    # Supabase Storage rejects non-ASCII object keys, so the key must be
+    # pure ASCII regardless of the hanzi it was derived from.
+    key1.encode("ascii")
+    assert "苹" not in key1
+
+
 class _FakeResponse:
     def __init__(self, json_data=None, content=b"", status_code=200):
         self._json_data = json_data
@@ -104,9 +118,10 @@ def test_store_generated_image_uploads_then_inserts_row(tmp_path, monkeypatch):
     img_path.write_bytes(b"real-image-bytes")
     scene_library.store_generated_image("鸡", "jī", "con gà", "a chicken", str(img_path))
 
+    key = scene_library.storage_key_for("鸡")
     assert len(calls) == 2
     upload_call, insert_call = calls
-    assert upload_call["url"] == "https://proj.supabase.co/storage/v1/object/scene-images/鸡.png"
+    assert upload_call["url"] == f"https://proj.supabase.co/storage/v1/object/scene-images/{key}"
     assert upload_call["data"] == b"real-image-bytes"
     assert upload_call["headers"]["x-upsert"] == "true"
 
@@ -116,7 +131,7 @@ def test_store_generated_image_uploads_then_inserts_row(tmp_path, monkeypatch):
         "pinyin": "jī",
         "meaning_vi": "con gà",
         "icon_prompt": "a chicken",
-        "image_path": "鸡.png",
+        "image_path": key,
     }
     assert insert_call["headers"]["Prefer"] == "resolution=merge-duplicates"
 

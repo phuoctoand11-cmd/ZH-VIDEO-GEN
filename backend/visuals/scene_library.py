@@ -13,6 +13,7 @@ Supabase outage or missing config must fall through to normal AI
 generation, not break video creation.
 """
 
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -23,6 +24,19 @@ logger = logging.getLogger(__name__)
 
 BUCKET = "scene-images"
 REQUEST_TIMEOUT_SECONDS = 10
+
+
+def storage_key_for(hanzi: str) -> str:
+    """Object key for a word's image in the `scene-images` bucket.
+
+    Supabase Storage rejects non-ASCII object keys, so the hanzi itself
+    can't be the filename — derive a stable ASCII key by hashing it. The
+    row's `image_path` column stores this exact value, and both writers
+    (store_generated_image, tools/load_scene_library.py) must use this
+    function so the same word always maps to the same object.
+    """
+    digest = hashlib.sha256(hanzi.encode("utf-8")).hexdigest()[:16]
+    return f"{digest}.png"
 
 
 def _get_credentials() -> tuple[str, str] | None:
@@ -91,7 +105,7 @@ def store_generated_image(
     if credentials is None:
         return
     base_url, key = credentials
-    storage_path = f"{hanzi}.png"
+    storage_path = storage_key_for(hanzi)
 
     try:
         with open(local_image_path, "rb") as f:

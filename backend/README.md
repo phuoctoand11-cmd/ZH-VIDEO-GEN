@@ -24,6 +24,23 @@ Xem thiết kế đầy đủ tại `docs/superpowers/specs/2026-08-24-zh-video-
 
 Chạy `supabase_setup.sql` trong SQL Editor của project Supabase để tạo bảng `scene_images`, rồi tạo Storage bucket tên `scene-images` (bật **Public bucket**) — chi tiết xem comment trong file SQL.
 
+### Nạp sẵn ảnh vào kho (tùy chọn)
+
+`tools/load_scene_library.py` nạp hàng loạt ảnh minh hoạ có sẵn vào kho (đối trọng offline của `visuals/scene_library.py::store_generated_image`): với mỗi dòng trong CSV, upload ảnh lên bucket rồi upsert 1 row `scene_images`. Idempotent, chạy lại được.
+
+Tên object trong bucket là `storage_key_for(hanzi)` (hash sha256 rút gọn + `.png`) — Supabase Storage từ chối key chứa ký tự CJK, nên không dùng `{hanzi}.png` trực tiếp. Cả loader và `store_generated_image` đều gọi cùng helper này; `find_cached_image` đọc `image_path` từ row nên không phụ thuộc cách đặt tên.
+
+CSV `tools/scene_library_seed.csv` có các cột `hanzi,pinyin,meaning_vi,source_path` (`source_path` tương đối so với `--images-root`). Chạy:
+
+```bash
+cd backend
+export SUPABASE_URL=...
+export SUPABASE_SERVICE_ROLE_KEY=...          # service_role key
+python tools/load_scene_library.py --images-root "D:/KHO ẢNH"
+```
+
+Dùng đường dẫn kiểu Windows cho `--images-root` (vd `D:/KHO ẢNH`), không dùng `/d/...`. Chỉ những `hanzi` khớp **chính xác** với từ trong bài mới được kho phục vụ — chắc ăn nhất là test bằng chế độ "Nhập danh sách".
+
 ## Chạy local
 
 ```bash

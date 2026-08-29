@@ -1,0 +1,25 @@
+hanzi,pinyin,meaning_vi,source_path
+苹果,píngguǒ,quả táo,FRUIT/Bo_trai_cay/01_tao.png
+香蕉,xiāngjiāo,quả chuối,FRUIT/Bo_trai_cay/02_chuoi.png
+橙子,chéngzi,quả cam,FRUIT/Bo_trai_cay/03_cam.png
+葡萄,pútáo,quả nho,FRUIT/Bo_trai_cay/04_nho.png
+西瓜,xīguā,dưa hấu,FRUIT/Bo_trai_cay/05_dua_hau.png
+草莓,cǎoméi,dâu tây,FRUIT/Bo_trai_cay/06_dau_tay.png
+芒果,mángguǒ,quả xoài,FRUIT/Bo_trai_cay/07_xoai.png
+菠萝,bōluó,quả dứa,FRUIT/Bo_trai_cay/08_dua.png
+胡萝卜,húluóbo,cà rốt,FRUIT/Bo_rau_cu/01_ca_rot.png
+番茄,fānqié,cà chua,FRUIT/Bo_rau_cu/02_ca_chua.png
+土豆,tǔdòu,khoai tây,FRUIT/Bo_rau_cu/03_khoai_tay.png
+玉米,yùmǐ,bắp ngô,FRUIT/Bo_rau_cu/04_bap.png
+西兰花,xīlánhuā,bông cải xanh,FRUIT/Bo_rau_cu/05_bong_cai_xanh.png
+黄瓜,huángguā,dưa leo,FRUIT/Bo_rau_cu/06_dua_leo.png
+南瓜,nánguā,bí ngô,FRUIT/Bo_rau_cu/07_bi_ngo.png
+洋葱,yángcōng,hành tây,FRUIT/Bo_rau_cu/08_hanh_tay.png
+狗,gǒu,con chó,ANIMAL/Bo_dong_vat_1/01_cho.png
+猫,māo,con mèo,ANIMAL/Bo_dong_vat_1/02_meo.png
+小鸡,xiǎojī,gà con,ANIMAL/Bo_dong_vat_1/03_ga_con.png
+金鱼,jīnyú,cá vàng,ANIMAL/Bo_dong_vat_1/04_ca_vang.png
+兔子,tùzi,con thỏ,ANIMAL/Bo_dong_vat_1/05_tho.png
+大象,dàxiàng,con voi,ANIMAL/Bo_dong_vat_1/06_voi.png
+狮子,shīzi,sư tử,ANIMAL/Bo_dong_vat_1/07_su_tu.png
+猴子,hóuzi,con khỉ,ANIMAL/Bo_dong_vat_1/08_khi.png
