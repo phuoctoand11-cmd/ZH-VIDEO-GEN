@@ -3,20 +3,33 @@
 App tạo video dạy tiếng Trung song ngữ Việt–Trung, deploy thật (URL cố định), miễn phí.
 Monorepo: `backend/` (Google Cloud Run, Gradio) + `frontend/` (Cloudflare Pages, static).
 
-## Trạng thái hiện tại (cập nhật 2026-08-29)
+## Trạng thái hiện tại (cập nhật 2026-09-01)
 
-- **Branch `main` sạch**, HEAD `808b383`, đã push. 125 test pytest, tất cả pass.
-- **Kho ảnh Supabase: ĐÃ setup xong** (project Supabase `yvybrsjgumwmmnwdqalq`, org "Learning-AI", tài khoản `xinthiet@gmail.com`):
-  - ✅ Bảng `scene_images` + index `scene_images_hanzi_idx` + RLS policy "Public read access" — đã chạy trong SQL Editor.
-  - ✅ Storage bucket `scene-images` — đã tạo, Public.
-  - ✅ Cloud Run (`zh-video-gen-backend`, project number `835496143706`, region `europe-west1`, revision đang chạy `00042-2dn`): `SUPABASE_URL` = `https://yvybrsjgumwmmnwdqalq.supabase.co` + `SUPABASE_SERVICE_ROLE_KEY` (dùng key `sb_secret_...` format mới — vẫn chạy đúng với PostgREST/Storage). Còn `HF_TOKEN` thừa từ hệ cũ, vô hại.
-  - ✅ Backend code có scene_library: Cloud Build `b1390431` từ commit `808b383` build + deploy thành công.
-  - ⏳ **Chưa chạy test end-to-end**: tạo video "Từ vựng theo chủ đề" trên https://zh-video-gen.pages.dev → xác nhận `scene_images` có row mới + bucket có ảnh; lần 2 cùng từ đó phải lấy từ kho (không gọi lại Cloudflare). Xem log Cloud Run tìm chuỗi `scene_images`.
-  - Lần test 28/08 sinh ảnh fail vì Cloudflare trả **HTTP 429 (rate limit)** → placeholder → không lưu kho (đúng thiết kế). Nếu kho vẫn rỗng sau khi tạo video, kiểm tra 429 trước khi nghĩ setup sai.
-- **Nạp sẵn kho ảnh**: `backend/tools/load_scene_library.py` + `backend/tools/scene_library_seed.csv` (24 từ: trái cây, rau củ, động vật bộ 1 — map từ `D:\KHO ẢNH`). Chạy local với `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (key nào cũng được — legacy JWT hoặc `sb_secret_`): `python tools/load_scene_library.py --images-root "D:/KHO ẢNH"`. Test `tests/tools/test_load_scene_library.py` (8 test). ✅ **Đã nạp 24 từ (2026-08-29)**: 24 row `scene_images` + 24 PNG trong bucket, public URL trả ảnh thật. Còn ~75 ảnh nữa trong `D:\KHO ẢNH` (FOOD, GIA VỊ, động vật bộ 2) chưa map. ⏳ Chưa có lần chạy pipeline thật xác nhận app lấy ảnh từ kho (test bằng "Nhập danh sách" với 苹果 / 狗).
-- **Bug đã sửa 2026-08-29**: `store_generated_image()` (và loader) trước dùng `{hanzi}.png` làm tên object → Supabase Storage trả `400 InvalidKey` (không nhận CJK). Giờ có `visuals/scene_library.py::storage_key_for(hanzi)` = hash sha256[:16] + `.png`, cả 2 nơi ghi đều dùng chung. `find_cached_image` đọc `image_path` từ row nên không đổi. Nghĩa là luồng "app tự lưu ảnh" trước giờ chưa từng chạy được — nay đã fix.
-- **Fix tải video 2026-08-30 (đã deploy + verify trên site thật)**: nút "Tải video" trước trỏ thẳng URL Gradio cross-origin không có `Content-Disposition` → Chrome lưu file tên UUID không đuôi. Thêm Pages Function `frontend/functions/dl/[[path]].js` (`/dl/<name>?src=<url>`): validate `src` đúng origin backend, fetch server-side, trả kèm `Content-Disposition: attachment; filename=...`. `frontend/js/result.js` thêm `buildDownloadHref()`; `frontend/js/ui.js` bỏ `downloadVideo`/`wireDownload` (fetch→blob→window.open) — nút tải giờ là link thường tới `/dl/...`. Test: `frontend/tests/dl.test.js` (5), `result.test.js` (+2). 41 test frontend pass. Lần đầu project có `frontend/functions/`. Đã verify: `/dl` trả 200 + `attachment; filename="video-9-16.mp4"` + MP4 thật.
-- Có 2 git worktree trong `.claude/worktrees/` (`backend-implementation`, `frontend-cloudflare`) — nhánh cũ, chưa dọn.
+- **Branch `main`**, HEAD `6a2e52d`, đã push. Backend 134 test pytest pass, frontend 41 test `node --test` pass.
+
+### ⏳ ĐANG DỞ — việc duy nhất còn lại
+
+**Nạp 53 ảnh mới lên bucket.** `backend/tools/scene_library_seed.csv` đã mở rộng lên **77 dòng** (commit `6a2e52d`) nhưng loader **chưa chạy** cho phần mới — bucket vẫn đang có 29 file / bảng `scene_images` 29 row. User cần chạy (PowerShell, cần `SUPABASE_SERVICE_ROLE_KEY` — legacy JWT hoặc `sb_secret_` đều được):
+```
+cd D:\WORKSPACE\zh-video-gen\backend
+$env:SUPABASE_URL = "https://yvybrsjgumwmmnwdqalq.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY = "<key>"
+python tools/load_scene_library.py --images-root "D:/KHO ẢNH"
+```
+Mong đợi `77 loaded, 0 failed` → bucket ~77 file, bảng ~81 row (77 + 4 organic: 煎饼/粥/豆浆/油条). Xong thì verify count trong Supabase dashboard.
+
+### ✅ ĐÃ XONG
+
+- **Kho ảnh Supabase**: project `yvybrsjgumwmmnwdqalq` (org "Learning-AI", tài khoản `xinthiet@gmail.com` — KHÁC email dùng ở máy). Bảng `scene_images` + index + RLS "Public read access", bucket `scene-images` (Public). Cloud Run `zh-video-gen-backend` (project number `835496143706`, region `europe-west1`) có sẵn `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+- **Loader** `backend/tools/load_scene_library.py` (+ `scene_library_seed.csv`, `tests/tools/`): đọc CSV `hanzi,pinyin,meaning_vi,source_path`, upload ảnh lên bucket + upsert row. Idempotent. Đã chạy thành công cho 24 dòng đầu; pipeline thật đã verify (video 狗 lấy ảnh từ kho, log "không có lỗi").
+- **Bug `InvalidKey` (commit `f3288ed`, deploy rồi)**: Supabase Storage không nhận tên object CJK → thêm `visuals/scene_library.py::storage_key_for(hanzi)` = `sha256(hanzi)[:16] + ".png"`; cả `store_generated_image` và loader dùng chung. `find_cached_image` đọc `image_path` từ row nên scheme-agnostic. (Luồng app tự lưu ảnh trước giờ chưa từng chạy được, nay OK.)
+- **Bug tải video ra file UUID không đuôi (commit `28e72cb`, deploy + verify)**: link tải trước trỏ thẳng URL Gradio cross-origin không có `Content-Disposition`. Thêm Pages Function `frontend/functions/dl/[[path]].js` (`/dl/<name>?src=<url>`): validate `src` đúng origin backend (chống SSRF), fetch server-side, trả kèm `Content-Disposition: attachment; filename=...`. `result.js::buildDownloadHref()`; `ui.js` bỏ hẳn `downloadVideo`/`wireDownload`. Verify: `/dl` trả 200 + `attachment; filename="video-9-16.mp4"` + MP4 thật.
+
+### Ghi chú
+
+- Lần test 28/08 sinh ảnh fail vì Cloudflare **HTTP 429 (rate limit)** → placeholder → không lưu kho (đúng thiết kế). Nếu kho không lớn thêm sau khi tạo video, kiểm tra 429 trước khi nghĩ setup sai.
+- 2 git worktree trong `.claude/worktrees/` (`backend-implementation`, `frontend-cloudflare`) — nhánh cũ, chưa dọn. `.claude/` đã gitignore.
+- `KHO ẢNH`: `D:\KHO ẢNH`, 92 PNG, tên `NN_<nhãn VN không dấu>.png`. Đã map hết trừ các bản trùng (gia_vi_2 = bản màu khác của gia_vi_1; 4 cupcake/2 flan/2 thạch/2 bắp rang gộp còn 1).
 
 ## URL deploy
 
